@@ -1,15 +1,14 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 8787;
+// health
+app.get("/health", (_, res) => res.status(200).send("ok"));
 
+// call
 app.post("/api/cloudtalk/call", async (req, res) => {
   try {
     const { agent_id, callee_number } = req.body || {};
@@ -24,9 +23,9 @@ app.post("/api/cloudtalk/call", async (req, res) => {
     const r = await fetch("https://my.cloudtalk.io/api/calls/create.json", {
       method: "POST",
       headers: {
-        "Accept": "application/json",
+        Accept: "application/json",
         "Content-Type": "application/json",
-        "Authorization": "Basic " + basic,
+        Authorization: "Basic " + basic,
       },
       body: JSON.stringify({ agent_id, callee_number }),
     });
@@ -39,5 +38,4 @@ app.post("/api/cloudtalk/call", async (req, res) => {
   }
 });
 
-app.get("/", (_, res) => res.status(200).send("ok"));
-app.listen(PORT, () => console.log(`Backend on http://localhost:${PORT}`));
+export default app;

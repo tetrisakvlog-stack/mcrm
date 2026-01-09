@@ -452,12 +452,12 @@ function MainTabs({
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <TabsList className="grid grid-cols-2 sm:grid-cols-5 rounded-2xl">
-        <TabsTrigger tab="my">Môj profil</TabsTrigger>
-        <TabsTrigger tab="records">Dochádzka & KPI</TabsTrigger>
-        <TabsTrigger tab="contacts">Kontakty</TabsTrigger>
-        <TabsTrigger tab="salary">Výplaty</TabsTrigger>
-        <TabsTrigger tab="admin" disabled={!isAdmin}>Admin</TabsTrigger>
-      </TabsList>
+       <TabsTrigger value="my">Môj profil</TabsTrigger>
+       <TabsTrigger value="records">Dochádzka & KPI</TabsTrigger>
+       <TabsTrigger value="contacts">Kontakty</TabsTrigger>
+       <TabsTrigger value="salary">Výplaty</TabsTrigger>
+       <TabsTrigger value="admin" disabled={!isAdmin}>Admin</TabsTrigger>
+   </TabsList>
 
       <TabsContent value="my" className="mt-4">
         <MyProfile profile={profile} monthStart={monthStart} monthEnd={monthEnd} saveMySip={saveMySip} />

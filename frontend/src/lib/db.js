@@ -44,12 +44,15 @@ export async function deleteRecord({ userId, date }) {
   if (error) throw error;
 }
 
-export async function listContacts({ assignedToUserId }) {
-  let q = supabase.from("contacts").select("*").order("updated_at", { ascending: false });
+export async function listContacts({ assignedToUserId } = {}) {
+  let q = supabase.from("contacts").select("*");
+
+  // dôležité: filter len keď máme reálne uuid
   if (assignedToUserId) q = q.eq("assigned_to_user_id", assignedToUserId);
-  const { data, error } = await q;
+
+  const { data, error } = await q.order("updated_at", { ascending: false });
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 export async function upsertContact(contact) {

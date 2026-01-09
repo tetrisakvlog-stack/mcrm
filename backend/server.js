@@ -39,5 +39,5 @@ app.post("/api/cloudtalk/call", async (req, res) => {
   }
 });
 
-app.get("/health", (_, res) => res.status(200).send("ok"));
+app.get("/", (_, res) => res.status(200).send("ok"));
 app.listen(PORT, () => console.log(`Backend on http://localhost:${PORT}`));

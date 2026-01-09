@@ -56,12 +56,18 @@ export async function listContacts({ assignedToUserId } = {}) {
 }
 
 export async function upsertContact(contact) {
-  const now = new Date().toISOString();
-  const payload = { ...contact, updated_at: now };
-  if (!payload.id) payload.created_at = now;
-  const { data, error } = await supabase.from("contacts").upsert(payload).select("*").single();
+  const payload = { ...contact };
+
+  // kľúčové: pri novom kontakte NESMIE ísť id:""
+  if (!payload.id) delete payload.id;
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .upsert(payload)
+    .select("*");
+
   if (error) throw error;
-  return data;
+  return data?.[0] ?? null;
 }
 
 export async function deleteContact(id) {

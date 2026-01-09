@@ -459,11 +459,11 @@ function MainTabs({
         <TabsTrigger tab="admin" disabled={!isAdmin}>Admin</TabsTrigger>
       </TabsList>
 
-      <TabsContent tab="my" value={tab} className="mt-4">
+      <TabsContent value="my" className="mt-4">
         <MyProfile profile={profile} monthStart={monthStart} monthEnd={monthEnd} saveMySip={saveMySip} />
       </TabsContent>
 
-      <TabsContent tab="records" value={tab} className="mt-4">
+      <TabsContent value="records" className="mt-4">
         <RecordsUI
           isAdmin={isAdmin}
           profile={profile}
@@ -476,7 +476,7 @@ function MainTabs({
         />
       </TabsContent>
 
-      <TabsContent tab="contacts" value={tab} className="mt-4">
+      <TabsContent value="contacts" className="mt-4">
         <ContactsUI
           isAdmin={isAdmin}
           profile={profile}
@@ -488,11 +488,11 @@ function MainTabs({
         />
       </TabsContent>
 
-      <TabsContent tab="salary" value={tab} className="mt-4">
+      <TabsContent value="salary" className="mt-4">
         <SalaryUI isAdmin={isAdmin} profile={profile} profiles={profiles} records={records} settings={settings} monthStart={monthStart} monthEnd={monthEnd} />
       </TabsContent>
 
-      <TabsContent tab="admin" value={tab} className="mt-4">
+      <TabsContent value="admin" className="mt-4">
         {isAdmin ? (
           <AdminUI profiles={profiles} settings={settings} updateUser={updateUser} updateSettings={updateSettings} />
         ) : (

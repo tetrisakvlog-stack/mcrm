@@ -52,6 +52,9 @@ import {
   updateSettings,
 } from "./lib/db.js";
 
+/** =========================
+ *  Helpers
+ *  ========================= */
 function todayISO() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -89,6 +92,59 @@ function isLikelyE164(phone) {
   return true;
 }
 
+/** =========================
+ *  Remember me (email)
+ *  ========================= */
+const REMEMBER_KEY = "mcrm_remember_login";
+const REMEMBER_EMAIL_KEY = "mcrm_remember_email";
+
+function loadRemember() {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function loadRememberEmail() {
+  try {
+    return localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+function saveRemember(remember, email) {
+  try {
+    localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
+    if (remember) localStorage.setItem(REMEMBER_EMAIL_KEY, email || "");
+    else localStorage.removeItem(REMEMBER_EMAIL_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** =========================
+ *  Brand Logo (mcrm)
+ *  ========================= */
+function BrandLogo() {
+  return (
+    <div className="flex flex-col items-center gap-1 select-none">
+      <div className="relative">
+        <div className="h-12 w-12 rounded-2xl border border-zinc-200 bg-white shadow-sm flex items-center justify-center">
+          {/* simple visual mark */}
+          <div className="relative h-7 w-7">
+            <div className="absolute inset-0 rounded-xl border border-zinc-200" />
+            <div className="absolute left-1 top-1 h-2 w-2 rounded-md bg-zinc-900" />
+            <div className="absolute right-1 top-1 h-2 w-2 rounded-md bg-zinc-900/70" />
+            <div className="absolute left-1 bottom-1 h-2 w-2 rounded-md bg-zinc-900/70" />
+            <div className="absolute right-1 bottom-1 h-2 w-2 rounded-md bg-zinc-900" />
+          </div>
+        </div>
+      </div>
+      <div className="text-lg font-semibold tracking-tight text-zinc-900">mcrm</div>
+    </div>
+  );
+}
+
 function Stat({ icon: Icon, label, value }) {
   return (
     <Card>
@@ -113,7 +169,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   const [authMode, setAuthMode] = useState("login");
-  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
+
+  const [rememberLogin, setRememberLogin] = useState(() => loadRemember());
+  const [authForm, setAuthForm] = useState(() => ({
+    name: "",
+    email: loadRememberEmail(),
+    password: "",
+  }));
 
   const isAdmin = profile?.role === "admin";
 
@@ -143,6 +205,11 @@ export default function App() {
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
+
+  useEffect(() => {
+    // persist remember state + email
+    saveRemember(rememberLogin, authForm.email.trim().toLowerCase());
+  }, [rememberLogin, authForm.email]);
 
   useEffect(() => {
     if (!session?.user?.id) {
@@ -218,17 +285,30 @@ export default function App() {
   async function login() {
     const email = authForm.email.trim().toLowerCase();
     const password = authForm.password;
+
+    if (!email) return toast.error("Zadaj email.");
+    if (!password) return toast.error("Zadaj heslo.");
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return toast.error(error.message);
+
+    // store/clear remember email after success
+    saveRemember(rememberLogin, email);
   }
 
   async function register() {
     const name = authForm.name.trim();
     const email = authForm.email.trim().toLowerCase();
     const password = authForm.password;
+
     if (!name) return toast.error("Zadaj meno.");
+    if (!email) return toast.error("Zadaj email.");
+    if (!password) return toast.error("Zadaj heslo.");
+
     const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
     if (error) return toast.error(error.message);
+
+    saveRemember(rememberLogin, email);
     toast.success("Registrácia OK. Ak máš zapnutý email confirm, potvrď email.");
   }
 
@@ -306,17 +386,17 @@ export default function App() {
     );
   }
 
+  // ✅ UPDATED LOGIN/REGISTER UI
   if (!session?.user?.id || !profile) {
     return (
       <div className="min-h-screen p-4 md:p-8">
         <div className="max-w-md mx-auto">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">mcrm</CardTitle>
+            <CardHeader className="pb-3">
               <div className="text-sm text-zinc-600">Prihlásenie / registrácia</div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
+
+              {/* buttons + logo centered between */}
+              <div className="mt-4 grid grid-cols-3 items-center gap-3">
                 <Button
                   variant={authMode === "login" ? "primary" : "outline"}
                   className="w-full"
@@ -324,6 +404,11 @@ export default function App() {
                 >
                   Prihlásiť
                 </Button>
+
+                <div className="flex justify-center">
+                  <BrandLogo />
+                </div>
+
                 <Button
                   variant={authMode === "register" ? "primary" : "outline"}
                   className="w-full"
@@ -332,7 +417,9 @@ export default function App() {
                   Registrovať
                 </Button>
               </div>
+            </CardHeader>
 
+            <CardContent className="space-y-4">
               {authMode === "register" && (
                 <div className="space-y-2">
                   <Label>Meno</Label>
@@ -349,7 +436,8 @@ export default function App() {
                 <Input
                   value={authForm.email}
                   onChange={(e) => setAuthForm((p) => ({ ...p, email: e.target.value }))}
-                  placeholder="meno@firma.sk"
+                  placeholder="meno@email.sk"
+                  autoComplete="email"
                 />
               </div>
 
@@ -360,7 +448,14 @@ export default function App() {
                   value={authForm.password}
                   onChange={(e) => setAuthForm((p) => ({ ...p, password: e.target.value }))}
                   placeholder="••••••••"
+                  autoComplete={authMode === "login" ? "current-password" : "new-password"}
                 />
+              </div>
+
+              {/* remember me */}
+              <div className="flex items-center justify-between rounded-xl border border-zinc-200 px-3 h-10">
+                <div className="text-sm text-zinc-700">Zapamätať prihlásenie</div>
+                <Switch checked={rememberLogin} onCheckedChange={setRememberLogin} />
               </div>
 
               <Button className="w-full" onClick={authMode === "login" ? login : register}>
@@ -487,6 +582,9 @@ export default function App() {
   );
 }
 
+/** =========================
+ *  Rest of app (unchanged)
+ *  ========================= */
 function DashboardOverview({ profile, records, monthStart, monthEnd }) {
   const rows = records.filter((r) => r.user_id === profile.id);
   const presentDays = rows.filter((r) => r.present).length;
@@ -601,7 +699,6 @@ function MainTabs({
   );
 }
 
-/** USER PROFIL: SIP sa už nezobrazuje userovi (iba admin bude nastavovať v Admin záložke) */
 function MyProfile({ profile }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -639,10 +736,6 @@ function Row({ label, value }) {
   );
 }
 
-/** DOCHÁDZKA & KPI:
- * - admin vie vybrať zamestnanca (už existuje)
- * - bežný user je uzamknutý na seba (už existuje, nechávame)
- */
 function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, onUpsertRecord, onDeleteRecord }) {
   const [selectedUserId, setSelectedUserId] = useState(profile.id);
   const [date, setDate] = useState(todayISO());
@@ -744,12 +837,6 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
               </Button>
             )}
           </div>
-
-          {!isAdmin && (
-            <div className="text-xs text-zinc-600">
-              Poznámka: bežný používateľ vie zapisovať iba svoje údaje.
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -914,11 +1001,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
               </div>
               <div className="grid gap-2">
                 <Label>Poznámky</Label>
-                <textarea
-                  className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-                  value={form.notes}
-                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-                />
+                <textarea className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
               </div>
               <div className="flex gap-2">
                 <Button
@@ -1087,13 +1170,8 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   );
 }
 
-/** ADMIN:
- * - users tabuľka ostáva
- * - pridáme SIP editor pre vybraného používateľa (iba admin)
- */
 function AdminUI({ profiles, settings, updateUser, updateSettings }) {
   const cloudtalk = settings?.cloudtalk || { enabled: false, backendUrl: "" };
-
   const activeUsers = useMemo(() => profiles.filter((p) => p.active), [profiles]);
   const [sipUserId, setSipUserId] = useState(() => activeUsers[0]?.id || "");
   const selectedUser = useMemo(() => profiles.find((p) => p.id === sipUserId) || null, [profiles, sipUserId]);
@@ -1143,31 +1221,20 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                     <Td className="font-medium">{u.name}</Td>
                     <Td className="text-zinc-600">{u.email}</Td>
                     <Td>
-                      <select
-                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
-                        value={u.role}
-                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
-                      >
+                      <select className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm" value={u.role} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
                     </Td>
                     <Td className="text-right">
-                      <Input
-                        className="w-[110px] ml-auto"
-                        inputMode="numeric"
-                        value={u.base_salary}
-                        onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
-                      />
+                      <Input className="w-[110px] ml-auto" inputMode="numeric" value={u.base_salary} onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })} />
                     </Td>
                     <Td className="text-right">
                       <Input
                         className="w-[110px] ml-auto"
                         inputMode="numeric"
                         value={u.cloudtalk_agent_id ?? ""}
-                        onChange={(e) =>
-                          updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
-                        }
+                        onChange={(e) => updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })}
                       />
                     </Td>
                     <Td className="text-right">
@@ -1191,11 +1258,7 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Používateľ</Label>
-              <select
-                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                value={sipUserId}
-                onChange={(e) => setSipUserId(e.target.value)}
-              >
+              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={sipUserId} onChange={(e) => setSipUserId(e.target.value)}>
                 {activeUsers.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} ({u.email})
@@ -1248,11 +1311,7 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
           </div>
           <div className="space-y-2">
             <Label>Backend URL</Label>
-            <Input
-              value={cloudtalk.backendUrl || ""}
-              onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalk, backendUrl: e.target.value } })}
-              placeholder="https://tvoj-backend.example"
-            />
+            <Input value={cloudtalk.backendUrl || ""} onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalk, backendUrl: e.target.value } })} placeholder="https://tvoj-backend.example" />
           </div>
         </CardContent>
       </Card>

@@ -2,36 +2,66 @@ import React, { createContext, useContext, useMemo } from "react";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
-export function Badge({ children, className = "" }) {
+export function Badge({ children, className = "", variant = "default" }) {
+  const styles = {
+    default: "bg-zinc-100 text-zinc-700",
+    secondary: "bg-zinc-900 text-white",
+    outline: "border border-zinc-300 bg-white text-zinc-900",
+  };
   return (
-    <span className={cx("inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700", className)}>
+    <span
+      className={cx(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        styles[variant] || styles.default,
+        className
+      )}
+    >
       {children}
     </span>
   );
 }
 
-export function Button({ children, className = "", variant = "primary", type = "button", disabled = false, onClick }) {
-  const base = "inline-flex items-center justify-center gap-2 rounded-2xl px-4 h-10 text-sm font-medium transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+export function Button({
+  children,
+  className = "",
+  variant = "primary",
+  type = "button",
+  disabled = false,
+  onClick,
+}) {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-2xl px-4 h-10 text-sm font-medium transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+
   const styles = {
     primary: "bg-zinc-900 text-white hover:bg-zinc-800",
     outline: "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
     ghost: "bg-transparent text-zinc-900 hover:bg-zinc-100",
   };
+
   return (
-    <button type={type} className={cx(base, styles[variant] || styles.primary, className)} disabled={disabled} onClick={onClick}>
+    <button
+      type={type}
+      className={cx(base, styles[variant] || styles.primary, className)}
+      disabled={disabled}
+      onClick={onClick}
+    >
       {children}
     </button>
   );
 }
 
 export function Card({ children, className = "" }) {
-  return <div className={cx("rounded-2xl border border-zinc-200 bg-white shadow-sm", className)}>{children}</div>;
+  return (
+    <div className={cx("rounded-2xl border border-zinc-200 bg-white shadow-sm", className)}>
+      {children}
+    </div>
+  );
 }
 export function CardHeader({ children, className = "" }) {
   return <div className={cx("px-5 pt-5 pb-2", className)}>{children}</div>;
 }
 export function CardTitle({ children, className = "" }) {
-  return <div className={cx("text-lg font-semibold", className)}>{children}</div>;
+  return <div className={cx("text-lg font-semibold text-zinc-900", className)}>{children}</div>;
 }
 export function CardContent({ children, className = "" }) {
   return <div className={cx("px-5 pb-5", className)}>{children}</div>;
@@ -40,7 +70,10 @@ export function CardContent({ children, className = "" }) {
 export function Input({ className = "", ...props }) {
   return (
     <input
-      className={cx("h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-zinc-300", className)}
+      className={cx(
+        "h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-300",
+        className
+      )}
       {...props}
     />
   );
@@ -59,10 +92,18 @@ export function Switch({ checked, onCheckedChange }) {
     <button
       type="button"
       onClick={() => onCheckedChange?.(!checked)}
-      className={cx("relative inline-flex h-6 w-11 items-center rounded-full border transition", checked ? "bg-zinc-900 border-zinc-900" : "bg-zinc-200 border-zinc-200")}
+      className={cx(
+        "relative inline-flex h-6 w-11 items-center rounded-full border transition",
+        checked ? "bg-zinc-900 border-zinc-900" : "bg-zinc-200 border-zinc-200"
+      )}
       aria-pressed={!!checked}
     >
-      <span className={cx("inline-block h-5 w-5 transform rounded-full bg-white transition", checked ? "translate-x-5" : "translate-x-0.5")} />
+      <span
+        className={cx(
+          "inline-block h-5 w-5 transform rounded-full bg-white transition",
+          checked ? "translate-x-5" : "translate-x-0.5"
+        )}
+      />
     </button>
   );
 }
@@ -77,22 +118,34 @@ export function Tabs({ value, onValueChange, children, className = "" }) {
     </TabsCtx.Provider>
   );
 }
+
 export function TabsList({ children, className = "" }) {
-  return <div className={cx("inline-flex flex-wrap gap-2 rounded-2xl border border-zinc-200 bg-white p-2", className)}>{children}</div>;
+  return (
+    <div className={cx("inline-flex flex-wrap gap-2 rounded-2xl border border-zinc-200 bg-white p-2", className)}>
+      {children}
+    </div>
+  );
 }
-export function TabsTrigger({ value, children, className = "" }) {
+
+export function TabsTrigger({ value, children, className = "", disabled = false }) {
   const ctx = useContext(TabsCtx);
   const active = ctx?.value === value;
   return (
     <button
       type="button"
-      onClick={() => ctx?.onValueChange?.(value)}
-      className={cx("h-9 rounded-xl px-3 text-sm font-medium transition", active ? "bg-zinc-900 text-white" : "bg-transparent text-zinc-800 hover:bg-zinc-100", className)}
+      disabled={disabled}
+      onClick={() => !disabled && ctx?.onValueChange?.(value)}
+      className={cx(
+        "h-9 rounded-xl px-3 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed",
+        active ? "bg-zinc-900 text-white" : "bg-transparent text-zinc-800 hover:bg-zinc-100",
+        className
+      )}
     >
       {children}
     </button>
   );
 }
+
 export function TabsContent({ value, children, className = "" }) {
   const ctx = useContext(TabsCtx);
   if (ctx?.value !== value) return null;
@@ -116,7 +169,7 @@ export function Th({ children, className = "" }) {
 }
 export function Td({ children, className = "", colSpan }) {
   return (
-    <td colSpan={colSpan} className={cx("px-3 py-2 align-top", className)}>
+    <td colSpan={colSpan} className={cx("px-3 py-2 align-top text-zinc-900", className)}>
       {children}
     </td>
   );
@@ -130,8 +183,12 @@ export function Dialog({ open, onOpenChange, title, children }) {
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white shadow-lg">
           <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200">
-            <div className="text-sm font-semibold">{title || ""}</div>
-            <button type="button" className="rounded-xl px-2 py-1 text-sm hover:bg-zinc-100" onClick={() => onOpenChange?.(false)}>
+            <div className="text-sm font-semibold text-zinc-900">{title || ""}</div>
+            <button
+              type="button"
+              className="rounded-xl px-2 py-1 text-sm hover:bg-zinc-100"
+              onClick={() => onOpenChange?.(false)}
+            >
               ✕
             </button>
           </div>

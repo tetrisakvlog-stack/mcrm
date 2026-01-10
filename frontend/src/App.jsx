@@ -1,88 +1,57 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
-import { LogOut, Shield, User, Clock, PhoneCall, ClipboardList, Calculator, Phone, Settings, Plus, Search } from "lucide-react";
 import {
-  Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Input, Label,
-  Switch, Tabs, TabsContent, TabsList, TabsTrigger,
-  Table, TBody, THead, Td, Th, Tr
+  LogOut,
+  Shield,
+  User,
+  Clock,
+  PhoneCall,
+  ClipboardList,
+  Calculator,
+  Phone,
+  Settings,
+  Plus,
+  Search,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  Input,
+  Label,
+  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Table,
+  TBody,
+  THead,
+  Td,
+  Th,
+  Tr,
 } from "./ui/ui.jsx";
 
 import { supabase } from "./lib/supabase";
 import {
-  ensureProfile, getMyProfile, listProfiles, updateProfile,
-  listRecords, upsertRecord, deleteRecord,
-  listContacts, upsertContact, deleteContact,
-  getSettings, updateSettings
+  ensureProfile,
+  getMyProfile,
+  listProfiles,
+  updateProfile,
+  listRecords,
+  upsertRecord,
+  deleteRecord,
+  listContacts,
+  upsertContact,
+  deleteContact,
+  getSettings,
+  updateSettings,
 } from "./lib/db.js";
 
-/** =========================
- *  THEME (biela / tmavá / systém)
- *  - ukladá sa do localStorage
- *  - "system" sleduje prefers-color-scheme
- *  - prepína priamo html.dark (Tailwind dark mode)
- *  ========================= */
-function getSystemTheme() {
-  try {
-    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
-  } catch {
-    return "light";
-  }
-}
-function resolveTheme(mode) {
-  return mode === "system" ? getSystemTheme() : mode;
-}
-function applyTheme(mode) {
-  const resolved = resolveTheme(mode);
-  document.documentElement.classList.toggle("dark", resolved === "dark");
-}
-function useTheme() {
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem("mcrm_theme");
-    return saved || "system";
-  });
-
-  useEffect(() => {
-    localStorage.setItem("mcrm_theme", theme);
-    applyTheme(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) return;
-
-    const handler = () => {
-      const current = localStorage.getItem("mcrm_theme") || "system";
-      if (current === "system") applyTheme("system");
-    };
-
-    mq.addEventListener?.("change", handler);
-    return () => mq.removeEventListener?.("change", handler);
-  }, []);
-
-  return { theme, setTheme };
-}
-
-function ThemeToggle({ theme, setTheme }) {
-  return (
-    <select
-      value={theme}
-      onChange={(e) => setTheme(e.target.value)}
-      className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none
-                 focus:ring-2 focus:ring-zinc-300
-                 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 dark:focus:ring-slate-700"
-      aria-label="Téma"
-      title="Téma"
-    >
-      <option value="light">biela</option>
-      <option value="dark">tmavá</option>
-      <option value="system">systém</option>
-    </select>
-  );
-}
-
-/** =========================
- *  Helpers
- *  ========================= */
 function todayISO() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -124,11 +93,11 @@ function Stat({ icon: Icon, label, value }) {
   return (
     <Card>
       <CardContent className="p-4 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-2xl bg-zinc-100 flex items-center justify-center dark:bg-slate-900/70">
+        <div className="h-10 w-10 rounded-2xl bg-zinc-100 flex items-center justify-center">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <div className="text-sm text-zinc-600 dark:text-slate-300">{label}</div>
+          <div className="text-sm text-zinc-600">{label}</div>
           <div className="text-xl font-semibold truncate">{value}</div>
         </div>
       </CardContent>
@@ -137,8 +106,6 @@ function Stat({ icon: Icon, label, value }) {
 }
 
 export default function App() {
-  const { theme, setTheme } = useTheme();
-
   const missingEnv = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const [session, setSession] = useState(null);
@@ -205,7 +172,9 @@ export default function App() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -225,7 +194,9 @@ export default function App() {
         toast.error(String(e?.message || e));
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session?.user?.id, profile?.id, isAdmin, monthStart, monthEnd]);
 
   useEffect(() => {
@@ -239,7 +210,9 @@ export default function App() {
         toast.error(String(e?.message || e));
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session?.user?.id, isAdmin]);
 
   async function login() {
@@ -315,19 +288,14 @@ export default function App() {
     }
   }
 
-  /** PAGE WRAPPERS: pozadie + text farby pre dark štýl */
-  const pageShell = "min-h-screen bg-white text-zinc-900 dark:bg-slate-950 dark:text-slate-100";
-
   if (missingEnv) {
     return (
-      <div className={`${pageShell} p-6 relative`}>
-        <div className="absolute top-4 right-4">
-          <ThemeToggle theme={theme} setTheme={setTheme} />
-        </div>
-
+      <div className="min-h-screen p-6">
         <Card>
-          <CardHeader><CardTitle>mcrm – chýbajú ENV premenné</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm text-zinc-700 dark:text-slate-300">
+          <CardHeader>
+            <CardTitle>mcrm – chýbajú ENV premenné</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-zinc-700">
             <div>Nastav vo Vercel:</div>
             <div className="font-mono">VITE_SUPABASE_URL</div>
             <div className="font-mono">VITE_SUPABASE_ANON_KEY</div>
@@ -341,12 +309,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className={`${pageShell} p-6 relative`}>
-        <div className="absolute top-4 right-4">
-          <ThemeToggle theme={theme} setTheme={setTheme} />
-        </div>
-
-        <div className="text-sm text-zinc-600 dark:text-slate-300">Načítavam…</div>
+      <div className="min-h-screen p-6">
+        <div className="text-sm text-zinc-600">Načítavam…</div>
         <Toaster position="top-right" />
       </div>
     );
@@ -354,21 +318,25 @@ export default function App() {
 
   if (!session?.user?.id || !profile) {
     return (
-      <div className={`${pageShell} p-4 md:p-8 relative`}>
-        <div className="absolute top-4 right-4">
-          <ThemeToggle theme={theme} setTheme={setTheme} />
-        </div>
-
+      <div className="min-h-screen p-4 md:p-8">
         <div className="max-w-md mx-auto">
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">mcrm</CardTitle>
-              <div className="text-sm text-zinc-600 dark:text-slate-300">Prihlásenie / registrácia</div>
+              <div className="text-sm text-zinc-600">Prihlásenie / registrácia</div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
-                <Button variant={authMode === "login" ? "primary" : "outline"} className="w-full" onClick={() => setAuthMode("login")}>Prihlásiť</Button>
-                <Button variant={authMode === "register" ? "primary" : "outline"} className="w-full" onClick={() => setAuthMode("register")}>Registrovať</Button>
+                <Button variant={authMode === "login" ? "primary" : "outline"} className="w-full" onClick={() => setAuthMode("login")}>
+                  Prihlásiť
+                </Button>
+                <Button
+                  variant={authMode === "register" ? "primary" : "outline"}
+                  className="w-full"
+                  onClick={() => setAuthMode("register")}
+                >
+                  Registrovať
+                </Button>
               </div>
 
               {authMode === "register" && (
@@ -400,30 +368,33 @@ export default function App() {
   }
 
   return (
-    <div className={pageShell}>
-      <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
+    <div className="min-h-screen">
+      <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-sm text-zinc-600 dark:text-slate-300">mcrm</div>
+            <div className="text-sm text-zinc-600">mcrm</div>
             <div className="flex items-center gap-2 min-w-0">
               <div className="font-semibold truncate">{profile.name}</div>
               {isAdmin ? (
-                <Badge variant="secondary" className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> admin</Badge>
+                <Badge className="inline-flex items-center gap-1">
+                  <Shield className="h-3 w-3" /> admin
+                </Badge>
               ) : (
-                <Badge variant="outline" className="inline-flex items-center gap-1"><User className="h-3 w-3" /> user</Badge>
+                <Badge className="inline-flex items-center gap-1">
+                  <User className="h-3 w-3" /> user
+                </Badge>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <ThemeToggle theme={theme} setTheme={setTheme} />
-
             <div className="hidden sm:flex items-center gap-2">
               <Label className="text-xs">Mesiac</Label>
               <Input className="w-[160px]" type="date" value={periodISO} onChange={(e) => setPeriodISO(e.target.value)} />
             </div>
-
-            <Button variant="outline" onClick={logout}><LogOut className="h-4 w-4" /></Button>
+            <Button variant="outline" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
@@ -511,15 +482,17 @@ export default function App() {
 }
 
 function DashboardOverview({ profile, records, monthStart, monthEnd }) {
-  const rows = records.filter(r => r.user_id === profile.id);
-  const presentDays = rows.filter(r => r.present).length;
+  const rows = records.filter((r) => r.user_id === profile.id);
+  const presentDays = rows.filter((r) => r.present).length;
   const minutes = rows.reduce((a, r) => a + (Number(r.minutes) || 0), 0);
   const successfulCalls = rows.reduce((a, r) => a + (Number(r.successful_calls) || 0), 0);
   const accounts = rows.reduce((a, r) => a + (Number(r.accounts) || 0), 0);
 
   return (
     <div className="space-y-3">
-      <div className="text-sm text-zinc-600 dark:text-slate-300">Prehľad za {monthStart} → {monthEnd}</div>
+      <div className="text-sm text-zinc-600">
+        Prehľad za {monthStart} → {monthEnd}
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat icon={ClipboardList} label="Dochádzka (dni)" value={presentDays} />
         <Stat icon={Clock} label="Navolané minúty" value={minutes} />
@@ -531,9 +504,23 @@ function DashboardOverview({ profile, records, monthStart, monthEnd }) {
 }
 
 function MainTabs({
-  profile, isAdmin, profiles, monthStart, monthEnd, records, contacts, settings,
-  saveMySip, refreshData, onUpsertRecord, onDeleteRecord, onUpsertContact, onDeleteContact,
-  initiateCall, updateUser, updateSettings
+  profile,
+  isAdmin,
+  profiles,
+  monthStart,
+  monthEnd,
+  records,
+  contacts,
+  settings,
+  saveMySip,
+  refreshData,
+  onUpsertRecord,
+  onDeleteRecord,
+  onUpsertContact,
+  onDeleteContact,
+  initiateCall,
+  updateUser,
+  updateSettings,
 }) {
   const [tab, setTab] = useState("my");
 
@@ -544,11 +531,13 @@ function MainTabs({
         <TabsTrigger value="records">Dochádzka & KPI</TabsTrigger>
         <TabsTrigger value="contacts">Kontakty</TabsTrigger>
         <TabsTrigger value="salary">Výplaty</TabsTrigger>
-        <TabsTrigger value="admin" disabled={!isAdmin}>Admin</TabsTrigger>
+        <TabsTrigger value="admin" disabled={!isAdmin}>
+          Admin
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="my" className="mt-4">
-        <MyProfile profile={profile} monthStart={monthStart} monthEnd={monthEnd} saveMySip={saveMySip} />
+        <MyProfile profile={profile} saveMySip={saveMySip} />
       </TabsContent>
 
       <TabsContent value="records" className="mt-4">
@@ -577,35 +566,57 @@ function MainTabs({
       </TabsContent>
 
       <TabsContent value="salary" className="mt-4">
-        <SalaryUI isAdmin={isAdmin} profile={profile} profiles={profiles} records={records} settings={settings} monthStart={monthStart} monthEnd={monthEnd} />
+        <SalaryUI
+          isAdmin={isAdmin}
+          profile={profile}
+          profiles={profiles}
+          records={records}
+          settings={settings}
+          monthStart={monthStart}
+          monthEnd={monthEnd}
+        />
       </TabsContent>
 
       <TabsContent value="admin" className="mt-4">
         {isAdmin ? (
           <AdminUI profiles={profiles} settings={settings} updateUser={updateUser} updateSettings={updateSettings} />
         ) : (
-          <Card><CardContent className="p-4 text-sm text-zinc-600 dark:text-slate-300">Nemáš admin oprávnenie.</CardContent></Card>
+          <Card>
+            <CardContent className="p-4 text-sm text-zinc-600">Nemáš admin oprávnenie.</CardContent>
+          </Card>
         )}
       </TabsContent>
 
       <div className="mt-3">
-        <Button variant="outline" onClick={refreshData}>Obnoviť dáta</Button>
+        <Button variant="outline" onClick={refreshData}>
+          Obnoviť dáta
+        </Button>
       </div>
     </Tabs>
   );
 }
 
 function MyProfile({ profile, saveMySip }) {
-  const [sip, setSip] = useState({ username: profile.sip_username || "", password: profile.sip_password || "", domain: profile.sip_domain || "" });
+  const [sip, setSip] = useState({
+    username: profile.sip_username || "",
+    password: profile.sip_password || "",
+    domain: profile.sip_domain || "",
+  });
 
   useEffect(() => {
-    setSip({ username: profile.sip_username || "", password: profile.sip_password || "", domain: profile.sip_domain || "" });
+    setSip({
+      username: profile.sip_username || "",
+      password: profile.sip_password || "",
+      domain: profile.sip_domain || "",
+    });
   }, [profile.id]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader><CardTitle>Profil</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Profil</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2 space-y-2">
           <Row label="Meno" value={profile.name} />
           <Row label="Email" value={profile.email} />
@@ -616,12 +627,23 @@ function MyProfile({ profile, saveMySip }) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>SIP údaje</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>SIP údaje</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2 space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2"><Label>SIP Username</Label><Input value={sip.username} onChange={(e) => setSip(p => ({ ...p, username: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>SIP Password</Label><Input type="password" value={sip.password} onChange={(e) => setSip(p => ({ ...p, password: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>SIP Domain</Label><Input value={sip.domain} onChange={(e) => setSip(p => ({ ...p, domain: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>SIP Username</Label>
+              <Input value={sip.username} onChange={(e) => setSip((p) => ({ ...p, username: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>SIP Password</Label>
+              <Input type="password" value={sip.password} onChange={(e) => setSip((p) => ({ ...p, password: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>SIP Domain</Label>
+              <Input value={sip.domain} onChange={(e) => setSip((p) => ({ ...p, domain: e.target.value }))} />
+            </div>
           </div>
           <Button onClick={() => saveMySip(sip)}>Uložiť SIP</Button>
         </CardContent>
@@ -633,7 +655,7 @@ function MyProfile({ profile, saveMySip }) {
 function Row({ label, value }) {
   return (
     <div className="flex items-center justify-between">
-      <div className="text-sm text-zinc-600 dark:text-slate-300">{label}</div>
+      <div className="text-sm text-zinc-600">{label}</div>
       <div className="text-sm font-medium">{value}</div>
     </div>
   );
@@ -644,9 +666,9 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState({ present: false, minutes: 0, successful_calls: 0, accounts: 0 });
 
-  const options = isAdmin ? profiles.filter(p => p.active) : [profile];
-  const rows = useMemo(() => records.filter(r => r.user_id === selectedUserId), [records, selectedUserId]);
-  const existing = useMemo(() => rows.find(r => r.date === date) || null, [rows, date]);
+  const options = isAdmin ? profiles.filter((p) => p.active) : [profile];
+  const rows = useMemo(() => records.filter((r) => r.user_id === selectedUserId), [records, selectedUserId]);
+  const existing = useMemo(() => rows.find((r) => r.date === date) || null, [rows, date]);
 
   useEffect(() => {
     if (existing) setForm({ present: !!existing.present, minutes: existing.minutes ?? 0, successful_calls: existing.successful_calls ?? 0, accounts: existing.accounts ?? 0 });
@@ -662,20 +684,18 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
       <Card>
         <CardHeader>
           <CardTitle>Záznam dňa</CardTitle>
-          <div className="text-sm text-zinc-600 dark:text-slate-300">Obdobie {monthStart} → {monthEnd}</div>
+          <div className="text-sm text-zinc-600">Obdobie {monthStart} → {monthEnd}</div>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>Zamestnanec</Label>
-              <select
-                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
-                           dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                disabled={!isAdmin}
-              >
-                {options.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} disabled={!isAdmin}>
+                {options.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
@@ -684,39 +704,61 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
             </div>
             <div className="space-y-2">
               <Label>Dochádzka</Label>
-              <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between dark:border-slate-700">
+              <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between">
                 <div className="text-sm">Prítomný</div>
-                <Switch checked={form.present} onCheckedChange={(v) => setForm(p => ({ ...p, present: v }))} />
+                <Switch checked={form.present} onCheckedChange={(v) => setForm((p) => ({ ...p, present: v }))} />
               </div>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2"><Label>Navolané minúty</Label><Input inputMode="numeric" value={form.minutes} onChange={(e) => setForm(p => ({ ...p, minutes: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Úspešné hovory</Label><Input inputMode="numeric" value={form.successful_calls} onChange={(e) => setForm(p => ({ ...p, successful_calls: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Založené účty</Label><Input inputMode="numeric" value={form.accounts} onChange={(e) => setForm(p => ({ ...p, accounts: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Navolané minúty</Label>
+              <Input inputMode="numeric" value={form.minutes} onChange={(e) => setForm((p) => ({ ...p, minutes: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Úspešné hovory</Label>
+              <Input inputMode="numeric" value={form.successful_calls} onChange={(e) => setForm((p) => ({ ...p, successful_calls: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Založené účty</Label>
+              <Input inputMode="numeric" value={form.accounts} onChange={(e) => setForm((p) => ({ ...p, accounts: e.target.value }))} />
+            </div>
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={() => onUpsertRecord(selectedUserId, date, {
-              present: !!form.present,
-              minutes: Number(form.minutes) || 0,
-              successful_calls: Number(form.successful_calls) || 0,
-              accounts: Number(form.accounts) || 0,
-            })}>Uložiť</Button>
-            {existing && <Button variant="outline" onClick={() => onDeleteRecord(selectedUserId, date)}>Zmazať</Button>}
+            <Button
+              onClick={() =>
+                onUpsertRecord(selectedUserId, date, {
+                  present: !!form.present,
+                  minutes: Number(form.minutes) || 0,
+                  successful_calls: Number(form.successful_calls) || 0,
+                  accounts: Number(form.accounts) || 0,
+                })
+              }
+            >
+              Uložiť
+            </Button>
+            {existing && (
+              <Button variant="outline" onClick={() => onDeleteRecord(selectedUserId, date)}>
+                Zmazať
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Prehľad záznamov</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Prehľad záznamov</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
+          <div className="overflow-auto rounded-xl border border-zinc-200">
             <Table>
               <THead>
                 <Tr>
-                  <Th>Dátum</Th><Th>Prítomný</Th>
+                  <Th>Dátum</Th>
+                  <Th>Prítomný</Th>
                   <Th className="text-right">Minúty</Th>
                   <Th className="text-right">Úspešné hovory</Th>
                   <Th className="text-right">Účty</Th>
@@ -724,9 +766,13 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
               </THead>
               <TBody>
                 {rows.length === 0 ? (
-                  <Tr><Td colSpan={5} className="text-zinc-600 dark:text-slate-300">Zatiaľ bez záznamov.</Td></Tr>
+                  <Tr>
+                    <Td colSpan={5} className="text-zinc-600">
+                      Zatiaľ bez záznamov.
+                    </Td>
+                  </Tr>
                 ) : (
-                  rows.map(r => (
+                  rows.map((r) => (
                     <Tr key={r.id}>
                       <Td className="font-medium">{r.date}</Td>
                       <Td>{r.present ? "Áno" : "Nie"}</Td>
@@ -750,12 +796,12 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
   const [status, setStatus] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const users = isAdmin ? profiles.filter(p => p.active) : [profile];
+  const users = isAdmin ? profiles.filter((p) => p.active) : [profile];
 
   const visible = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return contacts
-      .filter(c => {
+      .filter((c) => {
         const okStatus = status === "all" ? true : (c.status || "new") === status;
         const hay = `${c.name || ""} ${c.company || ""} ${c.phone || ""} ${c.email || ""}`.toLowerCase();
         const okQ = !qq ? true : hay.includes(qq);
@@ -768,13 +814,19 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
   const [form, setForm] = useState(empty);
 
   function openNew() {
-    setForm({ ...empty, assigned_to_user_id: isAdmin ? (users[0]?.id || profile.id) : profile.id });
+    setForm({ ...empty, assigned_to_user_id: isAdmin ? users[0]?.id || profile.id : profile.id });
     setDialogOpen(true);
   }
   function openEdit(c) {
     setForm({
-      id: c.id, name: c.name || "", phone: c.phone || "", email: c.email || "", company: c.company || "",
-      status: c.status || "new", assigned_to_user_id: c.assigned_to_user_id || profile.id, notes: c.notes || ""
+      id: c.id,
+      name: c.name || "",
+      phone: c.phone || "",
+      email: c.email || "",
+      company: c.company || "",
+      status: c.status || "new",
+      assigned_to_user_id: c.assigned_to_user_id || profile.id,
+      notes: c.notes || "",
     });
     setDialogOpen(true);
   }
@@ -782,24 +834,23 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Kontakty na volanie</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Kontakty na volanie</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2 space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2 sm:col-span-2">
               <Label>Vyhľadávanie</Label>
               <div className="flex gap-2">
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="meno, firma, číslo…" />
-                <Button variant="outline"><Search className="h-4 w-4" /></Button>
+                <Button variant="outline">
+                  <Search className="h-4 w-4" />
+                </Button>
               </div>
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <select
-                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
-                           dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
+              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="all">Všetky</option>
                 <option value="new">Nové</option>
                 <option value="in_progress">Rozpracované</option>
@@ -810,25 +861,34 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
             </div>
           </div>
 
-          <Button onClick={openNew}><Plus className="h-4 w-4" /> Pridať kontakt</Button>
+          <Button onClick={openNew}>
+            <Plus className="h-4 w-4" /> Pridať kontakt
+          </Button>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title={form.id ? "Upraviť kontakt" : "Nový kontakt"} trigger={null}>
             <div className="grid gap-3">
-              <div className="grid gap-2"><Label>Meno</Label><Input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-              <div className="grid gap-2"><Label>Telefón (E.164)</Label><Input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+421901234567" /></div>
+              <div className="grid gap-2">
+                <Label>Meno</Label>
+                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Telefón (E.164)</Label>
+                <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+421901234567" />
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-2"><Label>Email</Label><Input value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-                <div className="grid gap-2"><Label>Firma</Label><Input value={form.company} onChange={(e) => setForm(p => ({ ...p, company: e.target.value }))} /></div>
+                <div className="grid gap-2">
+                  <Label>Email</Label>
+                  <Input value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Firma</Label>
+                  <Input value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
+                </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label>Status</Label>
-                  <select
-                    className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
-                               dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
-                    value={form.status}
-                    onChange={(e) => setForm(p => ({ ...p, status: e.target.value }))}
-                  >
+                  <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
                     <option value="new">Nové</option>
                     <option value="in_progress">Rozpracované</option>
                     <option value="called">Zavolané</option>
@@ -838,30 +898,43 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                 </div>
                 <div className="grid gap-2">
                   <Label>Priradiť</Label>
-                  <select
-                    className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
-                               dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
-                    value={form.assigned_to_user_id}
-                    onChange={(e) => setForm(p => ({ ...p, assigned_to_user_id: e.target.value }))}
-                    disabled={!isAdmin}
-                  >
-                    {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={form.assigned_to_user_id} onChange={(e) => setForm((p) => ({ ...p, assigned_to_user_id: e.target.value }))} disabled={!isAdmin}>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
               <div className="grid gap-2">
                 <Label>Poznámky</Label>
                 <textarea
-                  className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none
-                             focus:ring-2 focus:ring-zinc-300
-                             dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 dark:focus:ring-slate-700"
+                  className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
                   value={form.notes}
-                  onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))}
+                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
                 />
               </div>
               <div className="flex gap-2">
-                <Button onClick={() => { onUpsertContact({ ...form }); setDialogOpen(false); }}>Uložiť</Button>
-                {form.id && <Button variant="outline" onClick={() => { onDeleteContact(form.id); setDialogOpen(false); }}>Zmazať</Button>}
+                <Button
+                  onClick={() => {
+                    onUpsertContact({ ...form });
+                    setDialogOpen(false);
+                  }}
+                >
+                  Uložiť
+                </Button>
+                {form.id && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      onDeleteContact(form.id);
+                      setDialogOpen(false);
+                    }}
+                  >
+                    Zmazať
+                  </Button>
+                )}
               </div>
             </div>
           </Dialog>
@@ -869,34 +942,50 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Zoznam</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Zoznam</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
+          <div className="overflow-auto rounded-xl border border-zinc-200">
             <Table>
               <THead>
                 <Tr>
-                  <Th>Meno</Th><Th>Telefón</Th><Th>Status</Th>
+                  <Th>Meno</Th>
+                  <Th>Telefón</Th>
+                  <Th>Status</Th>
                   {isAdmin && <Th>Priradené</Th>}
                   <Th className="text-right">Akcie</Th>
                 </Tr>
               </THead>
               <TBody>
                 {visible.length === 0 ? (
-                  <Tr><Td colSpan={isAdmin ? 5 : 4} className="text-zinc-600 dark:text-slate-300">Žiadne kontakty.</Td></Tr>
+                  <Tr>
+                    <Td colSpan={isAdmin ? 5 : 4} className="text-zinc-600">
+                      Žiadne kontakty.
+                    </Td>
+                  </Tr>
                 ) : (
-                  visible.map(c => (
+                  visible.map((c) => (
                     <Tr key={c.id}>
                       <Td className="font-medium">
-                        <button className="text-left hover:underline" onClick={() => openEdit(c)}>{c.name || "(bez mena)"}</button>
-                        {c.company ? <div className="text-xs text-zinc-600 dark:text-slate-300">{c.company}</div> : null}
+                        <button className="text-left hover:underline" onClick={() => openEdit(c)}>
+                          {c.name || "(bez mena)"}
+                        </button>
+                        {c.company ? <div className="text-xs text-zinc-600">{c.company}</div> : null}
                       </Td>
                       <Td className="font-mono text-xs">{c.phone || "—"}</Td>
-                      <Td><Badge>{c.status || "new"}</Badge></Td>
-                      {isAdmin && <Td className="text-sm text-zinc-600 dark:text-slate-300">{users.find(u => u.id === c.assigned_to_user_id)?.name || "—"}</Td>}
+                      <Td>
+                        <Badge>{c.status || "new"}</Badge>
+                      </Td>
+                      {isAdmin && <Td className="text-sm text-zinc-600">{users.find((u) => u.id === c.assigned_to_user_id)?.name || "—"}</Td>}
                       <Td className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button onClick={() => initiateCall(c)} disabled={!c.phone}><Phone className="h-4 w-4" /> Volaj</Button>
-                          <Button variant="outline" onClick={() => openEdit(c)}>Upraviť</Button>
+                          <Button onClick={() => initiateCall(c)} disabled={!c.phone}>
+                            <Phone className="h-4 w-4" /> Volaj
+                          </Button>
+                          <Button variant="outline" onClick={() => openEdit(c)}>
+                            Upraviť
+                          </Button>
                         </div>
                       </Td>
                     </Tr>
@@ -913,16 +1002,20 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
 
 function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd }) {
   const rules = settings?.salary_rules || {
-    bonusEnabled: true, minutesThreshold: 1200, minutesBonus: 50,
-    successfulCallsThreshold: 60, successfulCallsBonus: 100,
-    accountsThreshold: 10, accountsBonus: 150
+    bonusEnabled: true,
+    minutesThreshold: 1200,
+    minutesBonus: 50,
+    successfulCallsThreshold: 60,
+    successfulCallsBonus: 100,
+    accountsThreshold: 10,
+    accountsBonus: 150,
   };
 
-  const who = isAdmin ? profiles.filter(p => p.active) : [profile];
+  const who = isAdmin ? profiles.filter((p) => p.active) : [profile];
 
   const summaries = useMemo(() => {
-    return who.map(u => {
-      const rows = records.filter(r => r.user_id === u.id);
+    return who.map((u) => {
+      const rows = records.filter((r) => r.user_id === u.id);
       const minutes = rows.reduce((a, r) => a + (Number(r.minutes) || 0), 0);
       const successfulCalls = rows.reduce((a, r) => a + (Number(r.successful_calls) || 0), 0);
       const accounts = rows.reduce((a, r) => a + (Number(r.accounts) || 0), 0);
@@ -937,10 +1030,13 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
     });
   }, [who, records, rules]);
 
-  const totals = useMemo(() => ({
-    sumTotal: summaries.reduce((a, s) => a + s.total, 0),
-    sumBonus: summaries.reduce((a, s) => a + s.bonus, 0),
-  }), [summaries]);
+  const totals = useMemo(
+    () => ({
+      sumTotal: summaries.reduce((a, s) => a + s.total, 0),
+      sumBonus: summaries.reduce((a, s) => a + s.bonus, 0),
+    }),
+    [summaries]
+  );
 
   return (
     <div className="space-y-4">
@@ -951,9 +1047,14 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Výplaty</CardTitle><div className="text-sm text-zinc-600 dark:text-slate-300">{monthStart} → {monthEnd}</div></CardHeader>
+        <CardHeader>
+          <CardTitle>Výplaty</CardTitle>
+          <div className="text-sm text-zinc-600">
+            {monthStart} → {monthEnd}
+          </div>
+        </CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
+          <div className="overflow-auto rounded-xl border border-zinc-200">
             <Table>
               <THead>
                 <Tr>
@@ -964,7 +1065,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
                 </Tr>
               </THead>
               <TBody>
-                {summaries.map(s => (
+                {summaries.map((s) => (
                   <Tr key={s.id}>
                     <Td className="font-medium">{s.name}</Td>
                     <Td className="text-right">{s.base} €</Td>
@@ -987,30 +1088,29 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Používatelia</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Používatelia</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
+          <div className="overflow-auto rounded-xl border border-zinc-200">
             <Table>
               <THead>
                 <Tr>
-                  <Th>Meno</Th><Th>Email</Th><Th>Rola</Th>
+                  <Th>Meno</Th>
+                  <Th>Email</Th>
+                  <Th>Rola</Th>
                   <Th className="text-right">Základ (€)</Th>
                   <Th className="text-right">agent_id</Th>
                   <Th className="text-right">Aktívny</Th>
                 </Tr>
               </THead>
               <TBody>
-                {profiles.map(u => (
+                {profiles.map((u) => (
                   <Tr key={u.id}>
                     <Td className="font-medium">{u.name}</Td>
-                    <Td className="text-zinc-600 dark:text-slate-300">{u.email}</Td>
+                    <Td className="text-zinc-600">{u.email}</Td>
                     <Td>
-                      <select
-                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm
-                                   dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
-                        value={u.role}
-                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
-                      >
+                      <select className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm" value={u.role} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
@@ -1021,7 +1121,11 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                     <Td className="text-right">
                       <Input className="w-[110px] ml-auto" inputMode="numeric" value={u.cloudtalk_agent_id ?? ""} onChange={(e) => updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })} />
                     </Td>
-                    <Td className="text-right"><div className="flex justify-end"><Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} /></div></Td>
+                    <Td className="text-right">
+                      <div className="flex justify-end">
+                        <Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} />
+                      </div>
+                    </Td>
                   </Tr>
                 ))}
               </TBody>
@@ -1031,14 +1135,16 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>CloudTalk</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>CloudTalk</CardTitle>
+        </CardHeader>
         <CardContent className="pt-2 space-y-3">
-          <div className="flex items-center justify-between rounded-xl border border-zinc-200 p-3 dark:border-slate-800">
+          <div className="flex items-center justify-between rounded-xl border border-zinc-200 p-3">
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <div>
                 <div className="text-sm font-medium">Zapnúť CloudTalk</div>
-                <div className="text-xs text-zinc-600 dark:text-slate-300">Aktivuje „Volaj“.</div>
+                <div className="text-xs text-zinc-600">Aktivuje „Volaj“.</div>
               </div>
             </div>
             <Switch checked={!!cloudtalk.enabled} onCheckedChange={(v) => updateSettings({ cloudtalk: { ...cloudtalk, enabled: v } })} />

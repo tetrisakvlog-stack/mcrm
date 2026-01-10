@@ -12,10 +12,6 @@ import {
   Settings,
   Plus,
   Search,
-  Check,
-  X,
-  Image as ImageIcon,
-  Pencil,
 } from "lucide-react";
 import {
   Badge,
@@ -54,12 +50,6 @@ import {
   deleteContact,
   getSettings,
   updateSettings,
-  // alias/avatar requests
-  createProfileChangeRequest,
-  listMyProfileChangeRequests,
-  listPendingProfileChangeRequests,
-  reviewProfileChangeRequest,
-  uploadAvatarFile,
 } from "./lib/db.js";
 
 /** =========================
@@ -122,56 +112,71 @@ function countWorkdaysBetween(fromISO, toISO) {
 function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
-function safeStr(v) {
-  return (v ?? "").toString();
-}
 
 /** =========================
- *  Branding: Flame + MCRM
+ *  Branding: flame with CENTER text
+ *  - BrandLogo: MCRM in center
+ *  - UserAvatar: initials in center
  *  ========================= */
-function FlameMark({ size = 34 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className="block">
-      <path
-        d="M36.8 6.4c1.7 8.6-2.6 13.6-8.1 19.8-4.2 4.7-8.9 9.9-8.9 18.7 0 9.3 7.3 16.7 16.3 16.7 10.6 0 19.1-8.8 19.1-20.6 0-12.7-7.5-20-13.3-25.7-1.9-1.9-3.6-3.6-5.1-5.9z"
-        fill="#e11d48"
-      />
-      <path
-        d="M33.6 25.3c1.0 5.0-1.5 7.9-4.6 11.3-2.4 2.7-5.2 5.8-5.2 10.9 0 5.4 4.2 9.7 9.5 9.7 6.2 0 11.1-5.1 11.1-12.0 0-7.4-4.4-11.6-7.8-15.0-1.1-1.1-2.1-2.1-3.0-3.4z"
-        fill="#fb7185"
-        opacity="0.9"
-      />
-    </svg>
-  );
+function getInitials(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "U";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  const a = (parts[0][0] || "").toUpperCase();
+  const b = (parts[parts.length - 1][0] || "").toUpperCase();
+  return `${a} ${b}`.trim();
 }
 
-function BrandLockup({ className = "", size = 34, textClassName = "" }) {
-  return (
-    <div className={`flex flex-col items-center ${className}`}>
-      <FlameMark size={size} />
-      <div className={`mt-1 text-lg font-extrabold tracking-[0.18em] text-zinc-900 ${textClassName}`}>MCRM</div>
-    </div>
-  );
-}
-
-function Avatar({ url, name, size = 40 }) {
-  const initials = (name || "U").trim().slice(0, 1).toUpperCase();
+function McrmMark({ label = "MCRM", size = 40, className = "" }) {
   return (
     <div
-      className="rounded-2xl border border-zinc-200 bg-white overflow-hidden flex items-center justify-center"
+      className={`relative inline-flex items-center justify-center select-none ${className}`}
       style={{ width: size, height: size }}
-      title={name || ""}
+      aria-label={label}
+      title={label}
     >
-      {url ? (
-        <img src={url} alt={name || "avatar"} className="w-full h-full object-cover" />
-      ) : (
-        <div className="flex flex-col items-center justify-center">
-          <FlameMark size={Math.max(18, Math.floor(size * 0.55))} />
-          <div className="text-[10px] font-bold tracking-[0.18em] text-zinc-900 -mt-1">{initials}</div>
-        </div>
-      )}
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 64 64"
+        aria-hidden="true"
+        className="absolute inset-0 block"
+      >
+        <path
+          d="M36.8 6.4c1.7 8.6-2.6 13.6-8.1 19.8-4.2 4.7-8.9 9.9-8.9 18.7 0 9.3 7.3 16.7 16.3 16.7 10.6 0 19.1-8.8 19.1-20.6 0-12.7-7.5-20-13.3-25.7-1.9-1.9-3.6-3.6-5.1-5.9z"
+          fill="#e11d48"
+        />
+        <path
+          d="M33.6 25.3c1.0 5.0-1.5 7.9-4.6 11.3-2.4 2.7-5.2 5.8-5.2 10.9 0 5.4 4.2 9.7 9.5 9.7 6.2 0 11.1-5.1 11.1-12.0 0-7.4-4.4-11.6-7.8-15.0-1.1-1.1-2.1-2.1-3.0-3.4z"
+          fill="#fb7185"
+          opacity="0.9"
+        />
+      </svg>
+
+      <div
+        className="relative font-extrabold uppercase text-white"
+        style={{
+          fontSize: Math.max(10, Math.round(size * 0.28)),
+          letterSpacing: "0.14em",
+          textShadow: "0 2px 10px rgba(0,0,0,0.35)",
+          transform: "translateX(0.07em)",
+          lineHeight: 1,
+          textAlign: "center",
+          whiteSpace: "pre",
+        }}
+      >
+        {label}
+      </div>
     </div>
   );
+}
+
+function BrandLogo({ size = 40, className = "" }) {
+  return <McrmMark size={size} label="MCRM" className={className} />;
+}
+
+function UserAvatar({ name, size = 40, className = "" }) {
+  return <McrmMark size={size} label={getInitials(name)} className={className} />;
 }
 
 function Stat({ icon: Icon, label, value }) {
@@ -210,7 +215,6 @@ export default function App() {
   });
 
   const isAdmin = profile?.role === "admin";
-  const displayName = useMemo(() => profile?.alias || profile?.name || "User", [profile?.alias, profile?.name]);
 
   const [periodISO, setPeriodISO] = useState(() => todayISO());
   const monthStart = useMemo(() => startOfMonthISO(periodISO), [periodISO]);
@@ -220,10 +224,6 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [settings, setSettings] = useState(null);
-
-  // profile change requests
-  const [myRequests, setMyRequests] = useState([]);
-  const [pendingRequests, setPendingRequests] = useState([]);
 
   useEffect(() => {
     try {
@@ -258,8 +258,6 @@ export default function App() {
       setRecords([]);
       setContacts([]);
       setSettings(null);
-      setMyRequests([]);
-      setPendingRequests([]);
       return;
     }
 
@@ -274,14 +272,6 @@ export default function App() {
         if (cancelled) return;
         setProfile(my);
         setSettings(await getSettings());
-
-        // requests
-        try {
-          const mine = await listMyProfileChangeRequests(u.id);
-          if (!cancelled) setMyRequests(mine);
-        } catch (e) {
-          // ak ešte nemáš tabuľku / policies, nech to nepadá celé UI
-        }
       } catch (e) {
         toast.error(String(e?.message || e));
       } finally {
@@ -322,15 +312,7 @@ export default function App() {
     (async () => {
       try {
         const p = await listProfiles();
-        if (cancelled) return;
-        setProfiles(p);
-
-        try {
-          const pending = await listPendingProfileChangeRequests();
-          if (!cancelled) setPendingRequests(pending);
-        } catch {
-          // ignore if not set up yet
-        }
+        if (!cancelled) setProfiles(p);
       } catch (e) {
         toast.error(String(e?.message || e));
       }
@@ -371,24 +353,6 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
-  async function refreshRequests() {
-    if (!profile?.id) return;
-    try {
-      const mine = await listMyProfileChangeRequests(profile.id);
-      setMyRequests(mine);
-    } catch {
-      // ignore
-    }
-    if (isAdmin) {
-      try {
-        const pending = await listPendingProfileChangeRequests();
-        setPendingRequests(pending);
-      } catch {
-        // ignore
-      }
-    }
-  }
-
   async function refreshData() {
     if (!profile?.id) return;
     try {
@@ -401,55 +365,7 @@ export default function App() {
       setRecords(r);
       setContacts(c);
       setSettings(s);
-
-      // refresh profiles for admin
       if (isAdmin) setProfiles(await listProfiles());
-
-      // refresh my profile (alias/avatar may change after approval)
-      setProfile(await getMyProfile(profile.id));
-
-      await refreshRequests();
-    } catch (e) {
-      toast.error(String(e?.message || e));
-    }
-  }
-
-  async function requestAliasChange(alias) {
-    if (!profile?.id) return;
-    const clean = safeStr(alias).trim();
-    if (!clean) return toast.error("Zadaj alias.");
-    if (clean.length > 32) return toast.error("Alias je príliš dlhý (max 32).");
-
-    try {
-      await createProfileChangeRequest({ userId: profile.id, kind: "alias", payload: { alias: clean } });
-      toast.success("Žiadosť o alias odoslaná (čaká na schválenie adminom).");
-      await refreshRequests();
-    } catch (e) {
-      toast.error(String(e?.message || e));
-    }
-  }
-
-  async function requestAvatarChange(file) {
-    if (!profile?.id) return;
-    if (!file) return toast.error("Vyber obrázok.");
-    if (!file.type?.startsWith("image/")) return toast.error("Súbor musí byť obrázok.");
-
-    try {
-      const url = await uploadAvatarFile({ userId: profile.id, file });
-      await createProfileChangeRequest({ userId: profile.id, kind: "avatar", payload: { avatar_url: url } });
-      toast.success("Žiadosť o avatar odoslaná (čaká na schválenie adminom).");
-      await refreshRequests();
-    } catch (e) {
-      toast.error(String(e?.message || e));
-    }
-  }
-
-  async function adminReviewRequest(requestId, approve, note) {
-    if (!profile?.id) return;
-    try {
-      await reviewProfileChangeRequest({ requestId, approve, note, adminUserId: profile.id });
-      toast.success(approve ? "Schválené." : "Zamietnuté.");
-      await refreshData();
     } catch (e) {
       toast.error(String(e?.message || e));
     }
@@ -522,7 +438,7 @@ export default function App() {
                   Prihlásiť
                 </Button>
 
-                <BrandLockup size={34} />
+                <BrandLogo size={42} />
 
                 <Button
                   variant={authMode === "register" ? "primary" : "outline"}
@@ -586,11 +502,11 @@ export default function App() {
       <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
-            <Avatar url={profile.avatar_url || null} name={displayName} size={40} />
-
+            <BrandLogo size={30} />
+            <UserAvatar name={profile.name} size={34} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="font-semibold truncate">{displayName}</div>
+                <div className="font-semibold truncate">{profile.name}</div>
                 {isAdmin ? (
                   <Badge className="inline-flex items-center gap-1">
                     <Shield className="h-3 w-3" /> admin
@@ -600,12 +516,6 @@ export default function App() {
                     <User className="h-3 w-3" /> user
                   </Badge>
                 )}
-              </div>
-              <div className="text-xs text-zinc-500 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1">
-                  <FlameMark size={14} />
-                  <span className="font-bold tracking-[0.18em] text-zinc-900">MCRM</span>
-                </span>
               </div>
             </div>
           </div>
@@ -632,7 +542,6 @@ export default function App() {
 
         <MainTabs
           profile={profile}
-          displayName={displayName}
           isAdmin={isAdmin}
           profiles={profiles}
           monthStart={monthStart}
@@ -641,11 +550,6 @@ export default function App() {
           contacts={contacts}
           settings={settings}
           refreshData={refreshData}
-          myRequests={myRequests}
-          pendingRequests={pendingRequests}
-          requestAliasChange={requestAliasChange}
-          requestAvatarChange={requestAvatarChange}
-          adminReviewRequest={adminReviewRequest}
           onUpsertRecord={async (userId, date, patch) => {
             try {
               await upsertRecord({ userId, date, ...patch });
@@ -733,7 +637,6 @@ function DashboardOverview({ profile, records, monthStart, monthEnd }) {
 
 function MainTabs({
   profile,
-  displayName,
   isAdmin,
   profiles,
   monthStart,
@@ -742,11 +645,6 @@ function MainTabs({
   contacts,
   settings,
   refreshData,
-  myRequests,
-  pendingRequests,
-  requestAliasChange,
-  requestAvatarChange,
-  adminReviewRequest,
   onUpsertRecord,
   onDeleteRecord,
   onUpsertContact,
@@ -770,17 +668,7 @@ function MainTabs({
       </TabsList>
 
       <TabsContent value="my" className="mt-4">
-        <MyProfile
-          profile={profile}
-          displayName={displayName}
-          records={records}
-          monthStart={monthStart}
-          monthEnd={monthEnd}
-          isAdmin={isAdmin}
-          myRequests={myRequests}
-          requestAliasChange={requestAliasChange}
-          requestAvatarChange={requestAvatarChange}
-        />
+        <MyProfile profile={profile} records={records} monthStart={monthStart} monthEnd={monthEnd} isAdmin={isAdmin} />
       </TabsContent>
 
       <TabsContent value="records" className="mt-4">
@@ -822,14 +710,7 @@ function MainTabs({
 
       <TabsContent value="admin" className="mt-4">
         {isAdmin ? (
-          <AdminUI
-            profiles={profiles}
-            settings={settings}
-            pendingRequests={pendingRequests}
-            updateUser={updateUser}
-            updateSettings={updateSettings}
-            adminReviewRequest={adminReviewRequest}
-          />
+          <AdminUI profiles={profiles} settings={settings} updateUser={updateUser} updateSettings={updateSettings} />
         ) : (
           <Card>
             <CardContent className="p-4 text-sm text-zinc-600">Nemáš admin oprávnenie.</CardContent>
@@ -846,9 +727,8 @@ function MainTabs({
   );
 }
 
-function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmin, myRequests, requestAliasChange, requestAvatarChange }) {
+function MyProfile({ profile, records, monthStart, monthEnd, isAdmin }) {
   const [showEmail, setShowEmail] = useState(false);
-  const [aliasDraft, setAliasDraft] = useState("");
 
   const myRows = useMemo(() => (records || []).filter((r) => r.user_id === profile.id), [records, profile.id]);
   const presentDays = useMemo(() => myRows.filter((r) => !!r.present).length, [myRows]);
@@ -861,22 +741,19 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
     return round2(base * ratio);
   }, [profile.base_salary, presentDays, workdaysInMonth]);
 
-  const pendingMine = useMemo(() => (myRequests || []).filter((r) => r.status === "pending"), [myRequests]);
-
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader className="flex items-center justify-between">
           <CardTitle>Profil</CardTitle>
           <div className="flex items-center gap-2">
-            <Avatar url={profile.avatar_url || null} name={displayName} size={40} />
+            <BrandLogo size={26} />
+            <UserAvatar name={profile.name} size={34} />
           </div>
         </CardHeader>
 
-        <CardContent className="pt-2 space-y-3">
-          <Row label="Zobrazené meno" value={displayName} />
-
-          {isAdmin && profile.alias ? <Row label="Skutočné meno" value={profile.name} /> : null}
+        <CardContent className="pt-2 space-y-2">
+          <Row label="Meno" value={profile.name} />
 
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm text-zinc-600">Email</div>
@@ -893,62 +770,19 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
           {isAdmin ? <Row label="Základná mzda" value={`${Number(profile.base_salary || 0)} €`} /> : null}
 
-          <div className="pt-3 border-t border-zinc-100 space-y-2">
+          <div className="pt-2 border-t border-zinc-100">
             <Row label="Odchodené dni / pracovné dni" value={`${presentDays} / ${workdaysInMonth}`} />
             <Row label="Aktuálna výplata podľa dochádzky" value={`${currentPay} €`} />
-            <div className="text-xs text-zinc-600">
+            <div className="text-xs text-zinc-600 mt-1">
               Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.
             </div>
           </div>
 
-          <div className="pt-3 border-t border-zinc-100 space-y-3">
-            <div className="text-sm font-semibold">Alias & Avatar (schvaľuje admin)</div>
-
-            <div className="grid gap-2">
-              <Label>Požiadať o zmenu aliasu</Label>
-              <div className="flex gap-2">
-                <Input value={aliasDraft} onChange={(e) => setAliasDraft(e.target.value)} placeholder="napr. patres" />
-                <Button onClick={() => requestAliasChange(aliasDraft)}>
-                  <Pencil className="h-4 w-4" /> Odoslať
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Požiadať o zmenu avatara</Label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) requestAvatarChange(f);
-                    e.target.value = "";
-                  }}
-                />
-                <div className="text-xs text-zinc-600 inline-flex items-center gap-1">
-                  <ImageIcon className="h-4 w-4" /> obrázok (png/jpg/webp)
-                </div>
-              </div>
-            </div>
-
-            {pendingMine.length ? (
-              <div className="rounded-xl border border-zinc-200 p-3">
-                <div className="text-sm font-medium">Čakajúce žiadosti</div>
-                <div className="mt-2 space-y-1 text-xs text-zinc-600">
-                  {pendingMine.slice(0, 5).map((r) => (
-                    <div key={r.id}>
-                      • {r.kind} – {new Date(r.created_at).toLocaleString()}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs text-zinc-500">Žiadne čakajúce žiadosti.</div>
-            )}
-
-            {!isAdmin ? <div className="text-xs text-zinc-500">SIP údaje sú interné (spravuje admin).</div> : null}
-          </div>
+          {!isAdmin ? (
+            <div className="text-xs text-zinc-500 pt-2">SIP údaje sú interné (spravuje admin).</div>
+          ) : (
+            <div className="text-xs text-zinc-500 pt-2">SIP údaje spravuje admin v záložke Admin → Používatelia → SIP.</div>
+          )}
         </CardContent>
       </Card>
 
@@ -1028,7 +862,7 @@ function AdminMissingAttendancePanel({ profiles, records, onConfirm }) {
             <div key={u.id} className="rounded-xl border border-zinc-200 p-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <div className="font-medium truncate">{u.alias || u.name}</div>
+                  <div className="font-medium truncate">{u.name}</div>
                   <div className="text-xs text-zinc-600 truncate">{u.email}</div>
                 </div>
 
@@ -1046,8 +880,14 @@ function AdminMissingAttendancePanel({ profiles, records, onConfirm }) {
                   </select>
 
                   <div className="flex gap-2">
-                    <Button onClick={() => onConfirm(u.id, true, reasonById[u.id] || "Neprihlásený")}>Prítomný</Button>
-                    <Button variant="outline" onClick={() => onConfirm(u.id, false, reasonById[u.id] || "Neprihlásený")}>
+                    <Button onClick={() => onConfirm(u.id, true, reasonById[u.id] || "Neprihlásený")} title="Vytvorí dnešný záznam ako prítomný">
+                      Prítomný
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => onConfirm(u.id, false, reasonById[u.id] || "Neprihlásený")}
+                      title="Vytvorí dnešný záznam ako neprítomný"
+                    >
                       Neprítomný
                     </Button>
                   </div>
@@ -1065,13 +905,6 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
   const [selectedUserId, setSelectedUserId] = useState(profile.id);
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState({ present: false, minutes: 0, successful_calls: 0, accounts: 0 });
-
-  const today = todayISO();
-
-  // user môže zapisovať iba dnešok
-  useEffect(() => {
-    if (!isAdmin && date !== today) setDate(today);
-  }, [isAdmin, date, today]);
 
   const options = isAdmin ? profiles.filter((p) => p.active) : [profile];
   const rows = useMemo(() => records.filter((r) => r.user_id === selectedUserId), [records, selectedUserId]);
@@ -1130,18 +963,15 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
               >
                 {options.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.alias || u.name} ({u.email})
+                    {u.name} ({u.email})
                   </option>
                 ))}
               </select>
             </div>
-
             <div className="space-y-2">
               <Label>Dátum</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={!isAdmin} />
-              {!isAdmin ? <div className="text-xs text-zinc-500">User vie zapisovať iba dnešný deň.</div> : null}
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
-
             <div className="space-y-2">
               <Label>Dochádzka</Label>
               <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between">
@@ -1183,12 +1013,11 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
             >
               Uložiť
             </Button>
-
-            {existing && isAdmin ? (
+            {existing && (
               <Button variant="outline" onClick={() => onDeleteRecord(selectedUserId, date)}>
                 Zmazať
               </Button>
-            ) : null}
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1295,11 +1124,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <select
-                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
+              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="all">Všetky</option>
                 <option value="new">Nové</option>
                 <option value="in_progress">Rozpracované</option>
@@ -1359,7 +1184,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                   >
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.alias || u.name}
+                        {u.name}
                       </option>
                     ))}
                   </select>
@@ -1436,7 +1261,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                         <Badge>{c.status || "new"}</Badge>
                       </Td>
                       {isAdmin && (
-                        <Td className="text-sm text-zinc-600">{users.find((u) => u.id === c.assigned_to_user_id)?.alias || users.find((u) => u.id === c.assigned_to_user_id)?.name || "—"}</Td>
+                        <Td className="text-sm text-zinc-600">{users.find((u) => u.id === c.assigned_to_user_id)?.name || "—"}</Td>
                       )}
                       <Td className="text-right">
                         <div className="flex justify-end gap-2">
@@ -1486,7 +1311,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
         if (accounts >= rules.accountsThreshold) bonus += rules.accountsBonus;
       }
       const base = Number(u.base_salary || 0);
-      return { id: u.id, name: u.alias || u.name, base, bonus, total: base + bonus, minutes, successfulCalls, accounts };
+      return { id: u.id, name: u.name, base, bonus, total: base + bonus, minutes, successfulCalls, accounts };
     });
   }, [who, records, rules]);
 
@@ -1542,7 +1367,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   );
 }
 
-function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettings, adminReviewRequest }) {
+function AdminUI({ profiles, settings, updateUser, updateSettings }) {
   const cloudtalk = settings?.cloudtalk || { enabled: false, backendUrl: "" };
 
   const [sipOpen, setSipOpen] = useState(false);
@@ -1569,79 +1394,8 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
     setSipOpen(false);
   }
 
-  const pending = pendingRequests || [];
-
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Žiadosti o zmeny profilu (alias/avatar)</CardTitle>
-          <div className="text-sm text-zinc-600">Schvaľuješ zmeny ako admin. Po schválení sa upraví profil.</div>
-        </CardHeader>
-        <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200">
-            <Table>
-              <THead>
-                <Tr>
-                  <Th>Používateľ</Th>
-                  <Th>Typ</Th>
-                  <Th>Hodnota</Th>
-                  <Th>Dátum</Th>
-                  <Th className="text-right">Akcie</Th>
-                </Tr>
-              </THead>
-              <TBody>
-                {pending.length === 0 ? (
-                  <Tr>
-                    <Td colSpan={5} className="text-zinc-600">
-                      Žiadne čakajúce žiadosti.
-                    </Td>
-                  </Tr>
-                ) : (
-                  pending.map((r) => {
-                    const u = profiles.find((p) => p.id === r.user_id);
-                    const who = u ? (u.alias || u.name) : r.user_id;
-                    const val =
-                      r.kind === "alias"
-                        ? safeStr(r.payload?.alias)
-                        : r.kind === "avatar"
-                        ? safeStr(r.payload?.avatar_url)
-                        : JSON.stringify(r.payload || {});
-                    return (
-                      <Tr key={r.id}>
-                        <Td className="font-medium">{who}</Td>
-                        <Td>{r.kind}</Td>
-                        <Td className="max-w-[280px]">
-                          {r.kind === "avatar" && val ? (
-                            <div className="flex items-center gap-2">
-                              <img src={val} alt="avatar" className="h-10 w-10 rounded-2xl object-cover border border-zinc-200" />
-                              <div className="text-xs text-zinc-600 truncate">{val}</div>
-                            </div>
-                          ) : (
-                            <div className="text-sm">{val || "—"}</div>
-                          )}
-                        </Td>
-                        <Td className="text-xs text-zinc-600">{new Date(r.created_at).toLocaleString()}</Td>
-                        <Td className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button onClick={() => adminReviewRequest(r.id, true, "")}>
-                              <Check className="h-4 w-4" /> Schváliť
-                            </Button>
-                            <Button variant="outline" onClick={() => adminReviewRequest(r.id, false, "")}>
-                              <X className="h-4 w-4" /> Zamietnuť
-                            </Button>
-                          </div>
-                        </Td>
-                      </Tr>
-                    );
-                  })
-                )}
-              </TBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>Používatelia</CardTitle>
@@ -1651,8 +1405,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
             <Table>
               <THead>
                 <Tr>
-                  <Th>Avatar</Th>
-                  <Th>Meno/Alias</Th>
+                  <Th>Meno</Th>
                   <Th>Email</Th>
                   <Th>Rola</Th>
                   <Th className="text-right">Základ (€)</Th>
@@ -1664,10 +1417,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
               <TBody>
                 {profiles.map((u) => (
                   <Tr key={u.id}>
-                    <Td>
-                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} size={36} />
-                    </Td>
-                    <Td className="font-medium">{u.alias || u.name}</Td>
+                    <Td className="font-medium">{u.name}</Td>
                     <Td className="text-zinc-600">{u.email}</Td>
                     <Td>
                       <select
@@ -1692,7 +1442,9 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                         className="w-[110px] ml-auto"
                         inputMode="numeric"
                         value={u.cloudtalk_agent_id ?? ""}
-                        onChange={(e) => updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })}
+                        onChange={(e) =>
+                          updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
+                        }
                       />
                     </Td>
                     <Td className="text-right">
@@ -1711,7 +1463,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
             </Table>
           </div>
 
-          <Dialog open={sipOpen} onOpenChange={setSipOpen} title={sipUser ? `SIP – ${sipUser.alias || sipUser.name}` : "SIP"} trigger={null}>
+          <Dialog open={sipOpen} onOpenChange={setSipOpen} title={sipUser ? `SIP – ${sipUser.name}` : "SIP"} trigger={null}>
             <div className="grid gap-3">
               <div className="grid gap-2">
                 <Label>SIP Username</Label>

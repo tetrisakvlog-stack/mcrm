@@ -52,6 +52,14 @@ import {
   updateSettings,
 } from "./lib/db.js";
 
+/** =========================
+ *  Remember login toggle key
+ *  ========================= */
+const REMEMBER_KEY = "mcrm_remember_login";
+
+/** =========================
+ *  Helpers
+ *  ========================= */
 function todayISO() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -88,69 +96,57 @@ function isLikelyE164(phone) {
   }
   return true;
 }
+function isWeekday(d) {
+  const day = d.getDay(); // 0 Sun ... 6 Sat
+  return day >= 1 && day <= 5;
+}
+function countWorkdaysBetween(fromISO, toISO) {
+  const from = new Date(fromISO + "T00:00:00");
+  const to = new Date(toISO + "T00:00:00");
+  let n = 0;
+  for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+    if (isWeekday(d)) n++;
+  }
+  return n;
+}
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
 
-function McrmLogo({ className = "" }) {
-  // Inline SVG: štít + červený plameň + MCRM (tech/mono)
+/** =========================
+ *  Branding: Flame + MCRM
+ *  ========================= */
+function FlameMark({ size = 34 }) {
   return (
     <svg
-      viewBox="0 0 96 96"
-      className={className}
-      aria-label="mcrm logo"
-      role="img"
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      aria-hidden="true"
+      className="block"
     >
-      <defs>
-        <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#111827" />
-          <stop offset="1" stopColor="#0b0f18" />
-        </linearGradient>
-      </defs>
-
-      {/* Shield */}
+      {/* jednoduchý „plameň“ symbol (červený) */}
       <path
-        d="M48 6
-           C60 12, 72 12, 84 12
-           L84 44
-           C84 64, 70 80, 48 90
-           C26 80, 12 64, 12 44
-           L12 12
-           C24 12, 36 12, 48 6Z"
-        fill="url(#shield)"
-        stroke="#e5e7eb"
-        strokeWidth="2.5"
-        strokeLinejoin="round"
+        d="M36.8 6.4c1.7 8.6-2.6 13.6-8.1 19.8-4.2 4.7-8.9 9.9-8.9 18.7 0 9.3 7.3 16.7 16.3 16.7 10.6 0 19.1-8.8 19.1-20.6 0-12.7-7.5-20-13.3-25.7-1.9-1.9-3.6-3.6-5.1-5.9z"
+        fill="#e11d48"
       />
-
-      {/* Flame */}
       <path
-        d="M60 26
-           C55 30, 52 34, 52 38
-           C52 44, 58 46, 58 51
-           C58 58, 51 62, 44 62
-           C34 62, 30 56, 30 50
-           C30 42, 36 38, 41 34
-           C45 31, 47 28, 47 24
-           C53 27, 56 29, 60 26Z"
-        fill="#ef4444"
-        opacity="0.95"
+        d="M33.6 25.3c1.0 5.0-1.5 7.9-4.6 11.3-2.4 2.7-5.2 5.8-5.2 10.9 0 5.4 4.2 9.7 9.5 9.7 6.2 0 11.1-5.1 11.1-12.0 0-7.4-4.4-11.6-7.8-15.0-1.1-1.1-2.1-2.1-3.0-3.4z"
+        fill="#fb7185"
+        opacity="0.9"
       />
-
-      {/* MCRM text */}
-      <text
-        x="48"
-        y="76"
-        textAnchor="middle"
-        fontSize="14"
-        fontWeight="700"
-        letterSpacing="2"
-        fill="#ffffff"
-        style={{
-          fontFamily:
-            "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-        }}
-      >
-        MCRM
-      </text>
     </svg>
+  );
+}
+
+function BrandLockup({ className = "", size = 34, textClassName = "" }) {
+  return (
+    <div className={`flex flex-col items-center ${className}`}>
+      <FlameMark size={size} />
+      <div className={`mt-1 text-lg font-extrabold tracking-[0.18em] text-zinc-900 ${textClassName}`}>
+        MCRM
+      </div>
+    </div>
   );
 }
 
@@ -179,12 +175,15 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   const [authMode, setAuthMode] = useState("login");
-  const [authForm, setAuthForm] = useState(() => {
-    const savedEmail = localStorage.getItem("mcrm_saved_email") || "";
-    return { name: "", email: savedEmail, password: "" };
-  });
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
+
   const [rememberLogin, setRememberLogin] = useState(() => {
-    return localStorage.getItem("mcrm_remember_login") === "1";
+    try {
+      const v = localStorage.getItem(REMEMBER_KEY);
+      return v === null ? true : v === "1";
+    } catch {
+      return true;
+    }
   });
 
   const isAdmin = profile?.role === "admin";
@@ -197,6 +196,14 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [settings, setSettings] = useState(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(REMEMBER_KEY, rememberLogin ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [rememberLogin]);
 
   useEffect(() => {
     let mounted = true;
@@ -233,7 +240,8 @@ export default function App() {
       try {
         setLoading(true);
         const u = session.user;
-        const name = u.user_metadata?.name || u.email?.split("@")?.[0] || "User";
+        const name =
+          u.user_metadata?.name || u.email?.split("@")?.[0] || "User";
         await ensureProfile({ id: u.id, email: u.email, name });
         const my = await getMyProfile(u.id);
         if (cancelled) return;
@@ -293,10 +301,11 @@ export default function App() {
     const email = authForm.email.trim().toLowerCase();
     const password = authForm.password;
 
-    // "zapamätať prihlásenie" = zapamätaj email (prefill)
-    localStorage.setItem("mcrm_remember_login", rememberLogin ? "1" : "0");
-    if (rememberLogin) localStorage.setItem("mcrm_saved_email", email);
-    else localStorage.removeItem("mcrm_saved_email");
+    try {
+      localStorage.setItem(REMEMBER_KEY, rememberLogin ? "1" : "0");
+    } catch {
+      // ignore
+    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return toast.error(error.message);
@@ -307,6 +316,13 @@ export default function App() {
     const email = authForm.email.trim().toLowerCase();
     const password = authForm.password;
     if (!name) return toast.error("Zadaj meno.");
+
+    try {
+      localStorage.setItem(REMEMBER_KEY, rememberLogin ? "1" : "0");
+    } catch {
+      // ignore
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -336,6 +352,11 @@ export default function App() {
     } catch (e) {
       toast.error(String(e?.message || e));
     }
+  }
+
+  async function saveMySip(_sip) {
+    // SIP už NESMIE nastavovať user. Nechávame len admin workflow v AdminUI.
+    toast.error("SIP môže nastavovať iba admin.");
   }
 
   async function initiateCall(contact) {
@@ -409,26 +430,21 @@ export default function App() {
       <div className="min-h-screen p-4 md:p-8">
         <div className="max-w-md mx-auto">
           <Card>
-            <CardHeader className="space-y-4">
-              <div className="grid grid-cols-3 items-center gap-3">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
                 <Button
                   variant={authMode === "login" ? "primary" : "outline"}
-                  className="w-full"
+                  className="w-[130px]"
                   onClick={() => setAuthMode("login")}
                 >
                   Prihlásiť
                 </Button>
 
-                <div className="flex flex-col items-center justify-center gap-1">
-                  <div className="h-12 w-12 rounded-2xl bg-white border border-zinc-200 flex items-center justify-center shadow-sm">
-                    <McrmLogo className="h-10 w-10" />
-                  </div>
-                  <div className="font-semibold tracking-tight">mcrm</div>
-                </div>
+                <BrandLockup size={34} />
 
                 <Button
                   variant={authMode === "register" ? "primary" : "outline"}
-                  className="w-full"
+                  className="w-[130px]"
                   onClick={() => setAuthMode("register")}
                 >
                   Registrovať
@@ -487,7 +503,6 @@ export default function App() {
             </CardContent>
           </Card>
         </div>
-
         <Toaster position="top-right" />
       </div>
     );
@@ -497,19 +512,21 @@ export default function App() {
     <div className="min-h-screen">
       <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm text-zinc-600">mcrm</div>
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="font-semibold truncate">{profile.name}</div>
-              {isAdmin ? (
-                <Badge variant="secondary" className="inline-flex items-center gap-1">
-                  <Shield className="h-3 w-3" /> admin
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="inline-flex items-center gap-1">
-                  <User className="h-3 w-3" /> user
-                </Badge>
-              )}
+          <div className="min-w-0 flex items-center gap-3">
+            <BrandLockup size={26} textClassName="text-base tracking-[0.16em]" className="items-start" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="font-semibold truncate">{profile.name}</div>
+                {isAdmin ? (
+                  <Badge className="inline-flex items-center gap-1">
+                    <Shield className="h-3 w-3" /> admin
+                  </Badge>
+                ) : (
+                  <Badge className="inline-flex items-center gap-1">
+                    <User className="h-3 w-3" /> user
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
 
@@ -545,6 +562,8 @@ export default function App() {
           records={records}
           monthStart={monthStart}
           monthEnd={monthEnd}
+          isAdmin={isAdmin}
+          profiles={profiles}
         />
 
         <MainTabs
@@ -556,6 +575,7 @@ export default function App() {
           records={records}
           contacts={contacts}
           settings={settings}
+          saveMySip={saveMySip}
           refreshData={refreshData}
           onUpsertRecord={async (userId, date, patch) => {
             try {
@@ -620,18 +640,43 @@ export default function App() {
   );
 }
 
-function DashboardOverview({ profile, records, monthStart, monthEnd }) {
-  const rows = records.filter((r) => r.user_id === profile.id);
-  const presentDays = rows.filter((r) => r.present).length;
-  const minutes = rows.reduce((a, r) => a + (Number(r.minutes) || 0), 0);
-  const successfulCalls = rows.reduce(
-    (a, r) => a + (Number(r.successful_calls) || 0),
-    0
-  );
-  const accounts = rows.reduce((a, r) => a + (Number(r.accounts) || 0), 0);
+function DashboardOverview({ profile, records, monthStart, monthEnd, isAdmin, profiles }) {
+  const myRows = records.filter((r) => r.user_id === profile.id);
+  const presentDays = myRows.filter((r) => r.present).length;
+  const minutes = myRows.reduce((a, r) => a + (Number(r.minutes) || 0), 0);
+  const successfulCalls = myRows.reduce((a, r) => a + (Number(r.successful_calls) || 0), 0);
+  const accounts = myRows.reduce((a, r) => a + (Number(r.accounts) || 0), 0);
+
+  const adminMissingToday = useMemo(() => {
+    if (!isAdmin) return [];
+    const now = new Date();
+    const hour = now.getHours();
+    if (!isWeekday(now)) return [];
+    if (hour < 18) return []; // upozornenie až po 18:00
+    const dayISO = todayISO();
+    const actives = (profiles || []).filter((p) => !!p.active);
+    return actives
+      .filter((u) => !records.some((r) => r.user_id === u.id && r.date === dayISO))
+      .map((u) => u.name);
+  }, [isAdmin, profiles, records]);
 
   return (
     <div className="space-y-3">
+      {isAdmin && adminMissingToday.length > 0 && (
+        <Card>
+          <CardContent className="p-4 text-sm">
+            <div className="font-semibold">Upozornenie (dochádzka)</div>
+            <div className="text-zinc-600">
+              Po 18:00 chýba záznam pre dnešok:{" "}
+              <span className="font-medium text-zinc-900">
+                {adminMissingToday.join(", ")}
+              </span>
+              . Admin musí potvrdiť dochádzku.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="text-sm text-zinc-600">
         Prehľad za {monthStart} → {monthEnd}
       </div>
@@ -654,6 +699,7 @@ function MainTabs({
   records,
   contacts,
   settings,
+  saveMySip,
   refreshData,
   onUpsertRecord,
   onDeleteRecord,
@@ -678,7 +724,14 @@ function MainTabs({
       </TabsList>
 
       <TabsContent value="my" className="mt-4">
-        <MyProfile profile={profile} />
+        <MyProfile
+          profile={profile}
+          records={records}
+          monthStart={monthStart}
+          monthEnd={monthEnd}
+          isAdmin={isAdmin}
+          saveMySip={saveMySip}
+        />
       </TabsContent>
 
       <TabsContent value="records" className="mt-4">
@@ -744,20 +797,90 @@ function MainTabs({
   );
 }
 
-function MyProfile({ profile }) {
-  // SIP schované úplne – nastavuje iba admin v Admin záložke
+function MyProfile({ profile, records, monthStart, monthEnd, isAdmin }) {
+  const [showEmail, setShowEmail] = useState(false);
+
+  const myRows = useMemo(
+    () => (records || []).filter((r) => r.user_id === profile.id),
+    [records, profile.id]
+  );
+
+  const presentDays = useMemo(
+    () => myRows.filter((r) => !!r.present).length,
+    [myRows]
+  );
+
+  const workdaysInMonth = useMemo(
+    () => countWorkdaysBetween(monthStart, monthEnd),
+    [monthStart, monthEnd]
+  );
+
+  const currentPay = useMemo(() => {
+    const base = Number(profile.base_salary || 0);
+    if (!base || !workdaysInMonth) return 0;
+    const ratio = presentDays / workdaysInMonth;
+    return round2(base * ratio);
+  }, [profile.base_salary, presentDays, workdaysInMonth]);
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader>
+        <CardHeader className="flex items-center justify-between">
           <CardTitle>Profil</CardTitle>
+          <BrandLockup size={22} textClassName="text-sm tracking-[0.14em]" />
         </CardHeader>
+
         <CardContent className="pt-2 space-y-2">
           <Row label="Meno" value={profile.name} />
-          <Row label="Email" value={profile.email} />
+
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm text-zinc-600">Email</div>
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium font-mono">
+                {showEmail ? profile.email : "****@****"}
+              </div>
+              <Button
+                variant="ghost"
+                className="h-8 px-3 rounded-xl"
+                onClick={() => setShowEmail((v) => !v)}
+              >
+                {showEmail ? "Skryť" : "Zobraziť"}
+              </Button>
+            </div>
+          </div>
+
           <Row label="Rola" value={profile.role} />
-          <Row label="Základná mzda" value={`${profile.base_salary} €`} />
           <Row label="CloudTalk agent_id" value={profile.cloudtalk_agent_id ?? "—"} />
+
+          {/* Base salary nezobrazovať userovi */}
+          {isAdmin ? (
+            <Row label="Základná mzda" value={`${Number(profile.base_salary || 0)} €`} />
+          ) : null}
+
+          <div className="pt-2 border-t border-zinc-100">
+            <Row
+              label="Odchodené dni / pracovné dni"
+              value={`${presentDays} / ${workdaysInMonth}`}
+            />
+            <Row
+              label="Aktuálna výplata podľa dochádzky"
+              value={`${currentPay} €`}
+            />
+            <div className="text-xs text-zinc-600 mt-1">
+              Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.
+            </div>
+          </div>
+
+          {/* SIP sekciu pre usera úplne skrývame (interné) */}
+          {!isAdmin ? (
+            <div className="text-xs text-zinc-500 pt-2">
+              SIP údaje sú interné (spravuje admin).
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-500 pt-2">
+              SIP údaje spravuje admin v záložke Admin → Používatelia → SIP.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -765,8 +888,13 @@ function MyProfile({ profile }) {
         <CardHeader>
           <CardTitle>Info</CardTitle>
         </CardHeader>
-        <CardContent className="pt-2 text-sm text-zinc-600 space-y-2">
-          <div>SIP údaje sú interné a nastavuje ich iba admin.</div>
+        <CardContent className="pt-2 space-y-2 text-sm text-zinc-700">
+          <div>Pracovné dni: pondelok–piatok.</div>
+          <div>Pracovný čas: 09:00–18:00.</div>
+          <div className="text-xs text-zinc-600">
+            Ak sa používateľ neprihlási a nevyplní dochádzku, admin to po 18:00
+            musí potvrdiť v systéme (upozornenie sa zobrazí adminovi).
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -1003,8 +1131,11 @@ function ContactsUI({
     const qq = q.trim().toLowerCase();
     return contacts
       .filter((c) => {
-        const okStatus = status === "all" ? true : (c.status || "new") === status;
-        const hay = `${c.name || ""} ${c.company || ""} ${c.phone || ""} ${c.email || ""}`.toLowerCase();
+        const okStatus =
+          status === "all" ? true : (c.status || "new") === status;
+        const hay = `${c.name || ""} ${c.company || ""} ${c.phone || ""} ${
+          c.email || ""
+        }`.toLowerCase();
         const okQ = !qq ? true : hay.includes(qq);
         return okStatus && okQ;
       })
@@ -1026,7 +1157,7 @@ function ContactsUI({
   function openNew() {
     setForm({
       ...empty,
-      assigned_to_user_id: isAdmin ? (users[0]?.id || profile.id) : profile.id,
+      assigned_to_user_id: isAdmin ? users[0]?.id || profile.id : profile.id,
     });
     setDialogOpen(true);
   }
@@ -1090,20 +1221,25 @@ function ContactsUI({
             open={dialogOpen}
             onOpenChange={setDialogOpen}
             title={form.id ? "Upraviť kontakt" : "Nový kontakt"}
+            trigger={null}
           >
             <div className="grid gap-3">
               <div className="grid gap-2">
                 <Label>Meno</Label>
                 <Input
                   value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, name: e.target.value }))
+                  }
                 />
               </div>
               <div className="grid gap-2">
                 <Label>Telefón (E.164)</Label>
                 <Input
                   value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, phone: e.target.value }))
+                  }
                   placeholder="+421901234567"
                 />
               </div>
@@ -1112,14 +1248,18 @@ function ContactsUI({
                   <Label>Email</Label>
                   <Input
                     value={form.email}
-                    onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, email: e.target.value }))
+                    }
                   />
                 </div>
                 <div className="grid gap-2">
                   <Label>Firma</Label>
                   <Input
                     value={form.company}
-                    onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, company: e.target.value }))
+                    }
                   />
                 </div>
               </div>
@@ -1129,7 +1269,9 @@ function ContactsUI({
                   <select
                     className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
                     value={form.status}
-                    onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, status: e.target.value }))
+                    }
                   >
                     <option value="new">Nové</option>
                     <option value="in_progress">Rozpracované</option>
@@ -1144,7 +1286,10 @@ function ContactsUI({
                     className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
                     value={form.assigned_to_user_id}
                     onChange={(e) =>
-                      setForm((p) => ({ ...p, assigned_to_user_id: e.target.value }))
+                      setForm((p) => ({
+                        ...p,
+                        assigned_to_user_id: e.target.value,
+                      }))
                     }
                     disabled={!isAdmin}
                   >
@@ -1161,7 +1306,9 @@ function ContactsUI({
                 <textarea
                   className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
                   value={form.notes}
-                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, notes: e.target.value }))
+                  }
                 />
               </div>
               <div className="flex gap-2">
@@ -1233,8 +1380,8 @@ function ContactsUI({
                       </Td>
                       {isAdmin && (
                         <Td className="text-sm text-zinc-600">
-                          {users.find((u) => u.id === c.assigned_to_user_id)?.name ||
-                            "—"}
+                          {users.find((u) => u.id === c.assigned_to_user_id)
+                            ?.name || "—"}
                         </Td>
                       )}
                       <Td className="text-right">
@@ -1285,7 +1432,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
         if (accounts >= rules.accountsThreshold) bonus += rules.accountsBonus;
       }
       const base = Number(u.base_salary || 0);
-      return { id: u.id, name: u.name, base, bonus, total: base + bonus };
+      return { id: u.id, name: u.name, base, bonus, total: base + bonus, minutes, successfulCalls, accounts };
     });
   }, [who, records, rules]);
 
@@ -1308,7 +1455,9 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
       <Card>
         <CardHeader>
           <CardTitle>Výplaty</CardTitle>
-          <div className="text-sm text-zinc-600">{monthStart} → {monthEnd}</div>
+          <div className="text-sm text-zinc-600">
+            {monthStart} → {monthEnd}
+          </div>
         </CardHeader>
         <CardContent className="pt-2">
           <div className="overflow-auto rounded-xl border border-zinc-200">
@@ -1342,7 +1491,6 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
 function AdminUI({ profiles, settings, updateUser, updateSettings }) {
   const cloudtalk = settings?.cloudtalk || { enabled: false, backendUrl: "" };
 
-  // Admin-only SIP editor (na vybraného usera)
   const [sipOpen, setSipOpen] = useState(false);
   const [sipUser, setSipUser] = useState(null);
   const [sipForm, setSipForm] = useState({ username: "", password: "", domain: "" });
@@ -1365,7 +1513,6 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
       sip_domain: sipForm.domain,
     });
     setSipOpen(false);
-    setSipUser(null);
   }
 
   return (
@@ -1384,8 +1531,8 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                   <Th>Rola</Th>
                   <Th className="text-right">Základ (€)</Th>
                   <Th className="text-right">agent_id</Th>
-                  <Th className="text-right">Aktívny</Th>
                   <Th className="text-right">SIP</Th>
+                  <Th className="text-right">Aktívny</Th>
                 </Tr>
               </THead>
               <TBody>
@@ -1408,9 +1555,7 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                         className="w-[110px] ml-auto"
                         inputMode="numeric"
                         value={u.base_salary}
-                        onChange={(e) =>
-                          updateUser(u.id, { base_salary: Number(e.target.value) || 0 })
-                        }
+                        onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
                       />
                     </Td>
                     <Td className="text-right">
@@ -1419,25 +1564,19 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                         inputMode="numeric"
                         value={u.cloudtalk_agent_id ?? ""}
                         onChange={(e) =>
-                          updateUser(u.id, {
-                            cloudtalk_agent_id:
-                              e.target.value === "" ? null : Number(e.target.value),
-                          })
+                          updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
                         }
                       />
                     </Td>
                     <Td className="text-right">
-                      <div className="flex justify-end">
-                        <Switch
-                          checked={!!u.active}
-                          onCheckedChange={(v) => updateUser(u.id, { active: v })}
-                        />
-                      </div>
+                      <Button variant="outline" onClick={() => openSip(u)}>
+                        SIP
+                      </Button>
                     </Td>
                     <Td className="text-right">
-                      <Button variant="outline" onClick={() => openSip(u)}>
-                        Nastaviť
-                      </Button>
+                      <div className="flex justify-end">
+                        <Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} />
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -1445,33 +1584,19 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
             </Table>
           </div>
 
-          <Dialog
-            open={sipOpen}
-            onOpenChange={setSipOpen}
-            title={sipUser ? `SIP – ${sipUser.name}` : "SIP"}
-          >
+          <Dialog open={sipOpen} onOpenChange={setSipOpen} title={sipUser ? `SIP – ${sipUser.name}` : "SIP"} trigger={null}>
             <div className="grid gap-3">
               <div className="grid gap-2">
                 <Label>SIP Username</Label>
-                <Input
-                  value={sipForm.username}
-                  onChange={(e) => setSipForm((p) => ({ ...p, username: e.target.value }))}
-                />
+                <Input value={sipForm.username} onChange={(e) => setSipForm((p) => ({ ...p, username: e.target.value }))} />
               </div>
               <div className="grid gap-2">
                 <Label>SIP Password</Label>
-                <Input
-                  type="password"
-                  value={sipForm.password}
-                  onChange={(e) => setSipForm((p) => ({ ...p, password: e.target.value }))}
-                />
+                <Input type="password" value={sipForm.password} onChange={(e) => setSipForm((p) => ({ ...p, password: e.target.value }))} />
               </div>
               <div className="grid gap-2">
                 <Label>SIP Domain</Label>
-                <Input
-                  value={sipForm.domain}
-                  onChange={(e) => setSipForm((p) => ({ ...p, domain: e.target.value }))}
-                />
+                <Input value={sipForm.domain} onChange={(e) => setSipForm((p) => ({ ...p, domain: e.target.value }))} />
               </div>
               <div className="flex gap-2">
                 <Button onClick={saveSip}>Uložiť</Button>
@@ -1499,20 +1624,14 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
             </div>
             <Switch
               checked={!!cloudtalk.enabled}
-              onCheckedChange={(v) =>
-                updateSettings({ cloudtalk: { ...cloudtalk, enabled: v } })
-              }
+              onCheckedChange={(v) => updateSettings({ cloudtalk: { ...cloudtalk, enabled: v } })}
             />
           </div>
           <div className="space-y-2">
             <Label>Backend URL</Label>
             <Input
               value={cloudtalk.backendUrl || ""}
-              onChange={(e) =>
-                updateSettings({
-                  cloudtalk: { ...cloudtalk, backendUrl: e.target.value },
-                })
-              }
+              onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalk, backendUrl: e.target.value } })}
               placeholder="https://tvoj-backend.example"
             />
           </div>

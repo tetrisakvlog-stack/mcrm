@@ -254,16 +254,6 @@ export default function App() {
     }
   }
 
-  async function saveMySip(sip) {
-    try {
-      await updateProfile(profile.id, { sip_username: sip.username, sip_password: sip.password, sip_domain: sip.domain });
-      setProfile(await getMyProfile(profile.id));
-      toast.success("SIP uložené.");
-    } catch (e) {
-      toast.error(String(e?.message || e));
-    }
-  }
-
   async function initiateCall(contact) {
     if (!settings?.cloudtalk?.enabled) return toast.error("CloudTalk nie je zapnutý (admin).");
     if (!profile?.cloudtalk_agent_id) return toast.error("Chýba CloudTalk agent_id (admin ho nastaví).");
@@ -327,7 +317,11 @@ export default function App() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
-                <Button variant={authMode === "login" ? "primary" : "outline"} className="w-full" onClick={() => setAuthMode("login")}>
+                <Button
+                  variant={authMode === "login" ? "primary" : "outline"}
+                  className="w-full"
+                  onClick={() => setAuthMode("login")}
+                >
                   Prihlásiť
                 </Button>
                 <Button
@@ -342,18 +336,31 @@ export default function App() {
               {authMode === "register" && (
                 <div className="space-y-2">
                   <Label>Meno</Label>
-                  <Input value={authForm.name} onChange={(e) => setAuthForm((p) => ({ ...p, name: e.target.value }))} placeholder="Ján Novák" />
+                  <Input
+                    value={authForm.name}
+                    onChange={(e) => setAuthForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Ján Novák"
+                  />
                 </div>
               )}
 
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input value={authForm.email} onChange={(e) => setAuthForm((p) => ({ ...p, email: e.target.value }))} placeholder="meno@firma.sk" />
+                <Input
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm((p) => ({ ...p, email: e.target.value }))}
+                  placeholder="meno@firma.sk"
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Heslo</Label>
-                <Input type="password" value={authForm.password} onChange={(e) => setAuthForm((p) => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
+                <Input
+                  type="password"
+                  value={authForm.password}
+                  onChange={(e) => setAuthForm((p) => ({ ...p, password: e.target.value }))}
+                  placeholder="••••••••"
+                />
               </div>
 
               <Button className="w-full" onClick={authMode === "login" ? login : register}>
@@ -416,7 +423,6 @@ export default function App() {
           records={records}
           contacts={contacts}
           settings={settings}
-          saveMySip={saveMySip}
           refreshData={refreshData}
           onUpsertRecord={async (userId, date, patch) => {
             try {
@@ -467,8 +473,8 @@ export default function App() {
           updateSettings={async (patch) => {
             try {
               await updateSettings(patch);
-              setSettings(await getSettings());
               toast.success("Nastavenia uložené.");
+              await refreshData();
             } catch (e) {
               toast.error(String(e?.message || e));
             }
@@ -512,7 +518,6 @@ function MainTabs({
   records,
   contacts,
   settings,
-  saveMySip,
   refreshData,
   onUpsertRecord,
   onDeleteRecord,
@@ -537,7 +542,7 @@ function MainTabs({
       </TabsList>
 
       <TabsContent value="my" className="mt-4">
-        <MyProfile profile={profile} saveMySip={saveMySip} />
+        <MyProfile profile={profile} />
       </TabsContent>
 
       <TabsContent value="records" className="mt-4">
@@ -596,21 +601,8 @@ function MainTabs({
   );
 }
 
-function MyProfile({ profile, saveMySip }) {
-  const [sip, setSip] = useState({
-    username: profile.sip_username || "",
-    password: profile.sip_password || "",
-    domain: profile.sip_domain || "",
-  });
-
-  useEffect(() => {
-    setSip({
-      username: profile.sip_username || "",
-      password: profile.sip_password || "",
-      domain: profile.sip_domain || "",
-    });
-  }, [profile.id]);
-
+/** USER PROFIL: SIP sa už nezobrazuje userovi (iba admin bude nastavovať v Admin záložke) */
+function MyProfile({ profile }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
@@ -628,24 +620,10 @@ function MyProfile({ profile, saveMySip }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>SIP údaje</CardTitle>
+          <CardTitle>Interné</CardTitle>
         </CardHeader>
-        <CardContent className="pt-2 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>SIP Username</Label>
-              <Input value={sip.username} onChange={(e) => setSip((p) => ({ ...p, username: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>SIP Password</Label>
-              <Input type="password" value={sip.password} onChange={(e) => setSip((p) => ({ ...p, password: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>SIP Domain</Label>
-              <Input value={sip.domain} onChange={(e) => setSip((p) => ({ ...p, domain: e.target.value }))} />
-            </div>
-          </div>
-          <Button onClick={() => saveMySip(sip)}>Uložiť SIP</Button>
+        <CardContent className="pt-2 text-sm text-zinc-600">
+          SIP údaje sú interné a nastavuje ich administrátor.
         </CardContent>
       </Card>
     </div>
@@ -661,6 +639,10 @@ function Row({ label, value }) {
   );
 }
 
+/** DOCHÁDZKA & KPI:
+ * - admin vie vybrať zamestnanca (už existuje)
+ * - bežný user je uzamknutý na seba (už existuje, nechávame)
+ */
 function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, onUpsertRecord, onDeleteRecord }) {
   const [selectedUserId, setSelectedUserId] = useState(profile.id);
   const [date, setDate] = useState(todayISO());
@@ -671,7 +653,13 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
   const existing = useMemo(() => rows.find((r) => r.date === date) || null, [rows, date]);
 
   useEffect(() => {
-    if (existing) setForm({ present: !!existing.present, minutes: existing.minutes ?? 0, successful_calls: existing.successful_calls ?? 0, accounts: existing.accounts ?? 0 });
+    if (existing)
+      setForm({
+        present: !!existing.present,
+        minutes: existing.minutes ?? 0,
+        successful_calls: existing.successful_calls ?? 0,
+        accounts: existing.accounts ?? 0,
+      });
     else setForm({ present: false, minutes: 0, successful_calls: 0, accounts: 0 });
   }, [existing?.id]);
 
@@ -684,13 +672,20 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
       <Card>
         <CardHeader>
           <CardTitle>Záznam dňa</CardTitle>
-          <div className="text-sm text-zinc-600">Obdobie {monthStart} → {monthEnd}</div>
+          <div className="text-sm text-zinc-600">
+            Obdobie {monthStart} → {monthEnd}
+          </div>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>Zamestnanec</Label>
-              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} disabled={!isAdmin}>
+              <select
+                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                disabled={!isAdmin}
+              >
                 {options.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} ({u.email})
@@ -718,7 +713,11 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
             </div>
             <div className="space-y-2">
               <Label>Úspešné hovory</Label>
-              <Input inputMode="numeric" value={form.successful_calls} onChange={(e) => setForm((p) => ({ ...p, successful_calls: e.target.value }))} />
+              <Input
+                inputMode="numeric"
+                value={form.successful_calls}
+                onChange={(e) => setForm((p) => ({ ...p, successful_calls: e.target.value }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Založené účty</Label>
@@ -745,6 +744,12 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
               </Button>
             )}
           </div>
+
+          {!isAdmin && (
+            <div className="text-xs text-zinc-600">
+              Poznámka: bežný používateľ vie zapisovať iba svoje údaje.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1082,8 +1087,36 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   );
 }
 
+/** ADMIN:
+ * - users tabuľka ostáva
+ * - pridáme SIP editor pre vybraného používateľa (iba admin)
+ */
 function AdminUI({ profiles, settings, updateUser, updateSettings }) {
   const cloudtalk = settings?.cloudtalk || { enabled: false, backendUrl: "" };
+
+  const activeUsers = useMemo(() => profiles.filter((p) => p.active), [profiles]);
+  const [sipUserId, setSipUserId] = useState(() => activeUsers[0]?.id || "");
+  const selectedUser = useMemo(() => profiles.find((p) => p.id === sipUserId) || null, [profiles, sipUserId]);
+
+  const [sipForm, setSipForm] = useState({ username: "", password: "", domain: "" });
+
+  useEffect(() => {
+    if (!selectedUser) return;
+    setSipForm({
+      username: selectedUser.sip_username || "",
+      password: selectedUser.sip_password || "",
+      domain: selectedUser.sip_domain || "",
+    });
+  }, [selectedUser?.id]);
+
+  function saveSip() {
+    if (!selectedUser) return;
+    updateUser(selectedUser.id, {
+      sip_username: sipForm.username,
+      sip_password: sipForm.password,
+      sip_domain: sipForm.domain,
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -1110,16 +1143,32 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                     <Td className="font-medium">{u.name}</Td>
                     <Td className="text-zinc-600">{u.email}</Td>
                     <Td>
-                      <select className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm" value={u.role} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
+                      <select
+                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
+                        value={u.role}
+                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
+                      >
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
                     </Td>
                     <Td className="text-right">
-                      <Input className="w-[110px] ml-auto" inputMode="numeric" value={u.base_salary} onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })} />
+                      <Input
+                        className="w-[110px] ml-auto"
+                        inputMode="numeric"
+                        value={u.base_salary}
+                        onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
+                      />
                     </Td>
                     <Td className="text-right">
-                      <Input className="w-[110px] ml-auto" inputMode="numeric" value={u.cloudtalk_agent_id ?? ""} onChange={(e) => updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })} />
+                      <Input
+                        className="w-[110px] ml-auto"
+                        inputMode="numeric"
+                        value={u.cloudtalk_agent_id ?? ""}
+                        onChange={(e) =>
+                          updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                      />
                     </Td>
                     <Td className="text-right">
                       <div className="flex justify-end">
@@ -1130,6 +1179,54 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                 ))}
               </TBody>
             </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>SIP (interné)</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-2 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Používateľ</Label>
+              <select
+                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                value={sipUserId}
+                onChange={(e) => setSipUserId(e.target.value)}
+              >
+                {activeUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-xl border border-zinc-200 p-3 text-xs text-zinc-600 flex items-center">
+              SIP údaje sú interné a nevypisujú sa bežným používateľom.
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label>SIP Username</Label>
+              <Input value={sipForm.username} onChange={(e) => setSipForm((p) => ({ ...p, username: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>SIP Password</Label>
+              <Input type="password" value={sipForm.password} onChange={(e) => setSipForm((p) => ({ ...p, password: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>SIP Domain</Label>
+              <Input value={sipForm.domain} onChange={(e) => setSipForm((p) => ({ ...p, domain: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={saveSip} disabled={!selectedUser}>
+              Uložiť SIP
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -1151,7 +1248,11 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
           </div>
           <div className="space-y-2">
             <Label>Backend URL</Label>
-            <Input value={cloudtalk.backendUrl || ""} onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalk, backendUrl: e.target.value } })} placeholder="https://tvoj-backend.example" />
+            <Input
+              value={cloudtalk.backendUrl || ""}
+              onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalk, backendUrl: e.target.value } })}
+              placeholder="https://tvoj-backend.example"
+            />
           </div>
         </CardContent>
       </Card>

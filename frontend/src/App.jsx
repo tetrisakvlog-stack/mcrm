@@ -15,6 +15,74 @@ import {
   getSettings, updateSettings
 } from "./lib/db.js";
 
+/** =========================
+ *  THEME (biela / tmavá / systém)
+ *  - ukladá sa do localStorage
+ *  - "system" sleduje prefers-color-scheme
+ *  - prepína priamo html.dark (Tailwind dark mode)
+ *  ========================= */
+function getSystemTheme() {
+  try {
+    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+function resolveTheme(mode) {
+  return mode === "system" ? getSystemTheme() : mode;
+}
+function applyTheme(mode) {
+  const resolved = resolveTheme(mode);
+  document.documentElement.classList.toggle("dark", resolved === "dark");
+}
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("mcrm_theme");
+    return saved || "system";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("mcrm_theme", theme);
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return;
+
+    const handler = () => {
+      const current = localStorage.getItem("mcrm_theme") || "system";
+      if (current === "system") applyTheme("system");
+    };
+
+    mq.addEventListener?.("change", handler);
+    return () => mq.removeEventListener?.("change", handler);
+  }, []);
+
+  return { theme, setTheme };
+}
+
+function ThemeToggle({ theme, setTheme }) {
+  return (
+    <select
+      value={theme}
+      onChange={(e) => setTheme(e.target.value)}
+      className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none
+                 focus:ring-2 focus:ring-zinc-300
+                 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 dark:focus:ring-slate-700"
+      aria-label="Téma"
+      title="Téma"
+    >
+      <option value="light">biela</option>
+      <option value="dark">tmavá</option>
+      <option value="system">systém</option>
+    </select>
+  );
+}
+
+/** =========================
+ *  Helpers
+ *  ========================= */
 function todayISO() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -56,11 +124,11 @@ function Stat({ icon: Icon, label, value }) {
   return (
     <Card>
       <CardContent className="p-4 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-2xl bg-zinc-100 flex items-center justify-center">
+        <div className="h-10 w-10 rounded-2xl bg-zinc-100 flex items-center justify-center dark:bg-slate-900/70">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <div className="text-sm text-zinc-600">{label}</div>
+          <div className="text-sm text-zinc-600 dark:text-slate-300">{label}</div>
           <div className="text-xl font-semibold truncate">{value}</div>
         </div>
       </CardContent>
@@ -69,6 +137,8 @@ function Stat({ icon: Icon, label, value }) {
 }
 
 export default function App() {
+  const { theme, setTheme } = useTheme();
+
   const missingEnv = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const [session, setSession] = useState(null);
@@ -245,12 +315,19 @@ export default function App() {
     }
   }
 
+  /** PAGE WRAPPERS: pozadie + text farby pre dark štýl */
+  const pageShell = "min-h-screen bg-white text-zinc-900 dark:bg-slate-950 dark:text-slate-100";
+
   if (missingEnv) {
     return (
-      <div className="min-h-screen p-6">
+      <div className={`${pageShell} p-6 relative`}>
+        <div className="absolute top-4 right-4">
+          <ThemeToggle theme={theme} setTheme={setTheme} />
+        </div>
+
         <Card>
           <CardHeader><CardTitle>mcrm – chýbajú ENV premenné</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm text-zinc-700">
+          <CardContent className="space-y-2 text-sm text-zinc-700 dark:text-slate-300">
             <div>Nastav vo Vercel:</div>
             <div className="font-mono">VITE_SUPABASE_URL</div>
             <div className="font-mono">VITE_SUPABASE_ANON_KEY</div>
@@ -264,8 +341,12 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-6">
-        <div className="text-sm text-zinc-600">Načítavam…</div>
+      <div className={`${pageShell} p-6 relative`}>
+        <div className="absolute top-4 right-4">
+          <ThemeToggle theme={theme} setTheme={setTheme} />
+        </div>
+
+        <div className="text-sm text-zinc-600 dark:text-slate-300">Načítavam…</div>
         <Toaster position="top-right" />
       </div>
     );
@@ -273,12 +354,16 @@ export default function App() {
 
   if (!session?.user?.id || !profile) {
     return (
-      <div className="min-h-screen p-4 md:p-8">
+      <div className={`${pageShell} p-4 md:p-8 relative`}>
+        <div className="absolute top-4 right-4">
+          <ThemeToggle theme={theme} setTheme={setTheme} />
+        </div>
+
         <div className="max-w-md mx-auto">
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">mcrm</CardTitle>
-              <div className="text-sm text-zinc-600">Prihlásenie / registrácia</div>
+              <div className="text-sm text-zinc-600 dark:text-slate-300">Prihlásenie / registrácia</div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
@@ -315,11 +400,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
+    <div className={pageShell}>
+      <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-sm text-zinc-600">mcrm</div>
+            <div className="text-sm text-zinc-600 dark:text-slate-300">mcrm</div>
             <div className="flex items-center gap-2 min-w-0">
               <div className="font-semibold truncate">{profile.name}</div>
               {isAdmin ? (
@@ -331,10 +416,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle theme={theme} setTheme={setTheme} />
+
             <div className="hidden sm:flex items-center gap-2">
               <Label className="text-xs">Mesiac</Label>
               <Input className="w-[160px]" type="date" value={periodISO} onChange={(e) => setPeriodISO(e.target.value)} />
             </div>
+
             <Button variant="outline" onClick={logout}><LogOut className="h-4 w-4" /></Button>
           </div>
         </div>
@@ -425,13 +513,13 @@ export default function App() {
 function DashboardOverview({ profile, records, monthStart, monthEnd }) {
   const rows = records.filter(r => r.user_id === profile.id);
   const presentDays = rows.filter(r => r.present).length;
-  const minutes = rows.reduce((a,r) => a + (Number(r.minutes)||0), 0);
-  const successfulCalls = rows.reduce((a,r) => a + (Number(r.successful_calls)||0), 0);
-  const accounts = rows.reduce((a,r) => a + (Number(r.accounts)||0), 0);
+  const minutes = rows.reduce((a, r) => a + (Number(r.minutes) || 0), 0);
+  const successfulCalls = rows.reduce((a, r) => a + (Number(r.successful_calls) || 0), 0);
+  const accounts = rows.reduce((a, r) => a + (Number(r.accounts) || 0), 0);
 
   return (
     <div className="space-y-3">
-      <div className="text-sm text-zinc-600">Prehľad za {monthStart} → {monthEnd}</div>
+      <div className="text-sm text-zinc-600 dark:text-slate-300">Prehľad za {monthStart} → {monthEnd}</div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat icon={ClipboardList} label="Dochádzka (dni)" value={presentDays} />
         <Stat icon={Clock} label="Navolané minúty" value={minutes} />
@@ -452,12 +540,12 @@ function MainTabs({
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <TabsList className="grid grid-cols-2 sm:grid-cols-5 rounded-2xl">
-       <TabsTrigger value="my">Môj profil</TabsTrigger>
-       <TabsTrigger value="records">Dochádzka & KPI</TabsTrigger>
-       <TabsTrigger value="contacts">Kontakty</TabsTrigger>
-       <TabsTrigger value="salary">Výplaty</TabsTrigger>
-       <TabsTrigger value="admin" disabled={!isAdmin}>Admin</TabsTrigger>
-   </TabsList>
+        <TabsTrigger value="my">Môj profil</TabsTrigger>
+        <TabsTrigger value="records">Dochádzka & KPI</TabsTrigger>
+        <TabsTrigger value="contacts">Kontakty</TabsTrigger>
+        <TabsTrigger value="salary">Výplaty</TabsTrigger>
+        <TabsTrigger value="admin" disabled={!isAdmin}>Admin</TabsTrigger>
+      </TabsList>
 
       <TabsContent value="my" className="mt-4">
         <MyProfile profile={profile} monthStart={monthStart} monthEnd={monthEnd} saveMySip={saveMySip} />
@@ -496,7 +584,7 @@ function MainTabs({
         {isAdmin ? (
           <AdminUI profiles={profiles} settings={settings} updateUser={updateUser} updateSettings={updateSettings} />
         ) : (
-          <Card><CardContent className="p-4 text-sm text-zinc-600">Nemáš admin oprávnenie.</CardContent></Card>
+          <Card><CardContent className="p-4 text-sm text-zinc-600 dark:text-slate-300">Nemáš admin oprávnenie.</CardContent></Card>
         )}
       </TabsContent>
 
@@ -545,7 +633,7 @@ function MyProfile({ profile, saveMySip }) {
 function Row({ label, value }) {
   return (
     <div className="flex items-center justify-between">
-      <div className="text-sm text-zinc-600">{label}</div>
+      <div className="text-sm text-zinc-600 dark:text-slate-300">{label}</div>
       <div className="text-sm font-medium">{value}</div>
     </div>
   );
@@ -574,13 +662,19 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
       <Card>
         <CardHeader>
           <CardTitle>Záznam dňa</CardTitle>
-          <div className="text-sm text-zinc-600">Obdobie {monthStart} → {monthEnd}</div>
+          <div className="text-sm text-zinc-600 dark:text-slate-300">Obdobie {monthStart} → {monthEnd}</div>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>Zamestnanec</Label>
-              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} disabled={!isAdmin}>
+              <select
+                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
+                           dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                disabled={!isAdmin}
+              >
                 {options.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
               </select>
             </div>
@@ -590,7 +684,7 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
             </div>
             <div className="space-y-2">
               <Label>Dochádzka</Label>
-              <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between">
+              <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between dark:border-slate-700">
                 <div className="text-sm">Prítomný</div>
                 <Switch checked={form.present} onCheckedChange={(v) => setForm(p => ({ ...p, present: v }))} />
               </div>
@@ -618,7 +712,7 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
       <Card>
         <CardHeader><CardTitle>Prehľad záznamov</CardTitle></CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200">
+          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
             <Table>
               <THead>
                 <Tr>
@@ -630,7 +724,7 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
               </THead>
               <TBody>
                 {rows.length === 0 ? (
-                  <Tr><Td colSpan={5} className="text-zinc-600">Zatiaľ bez záznamov.</Td></Tr>
+                  <Tr><Td colSpan={5} className="text-zinc-600 dark:text-slate-300">Zatiaľ bez záznamov.</Td></Tr>
                 ) : (
                   rows.map(r => (
                     <Tr key={r.id}>
@@ -667,7 +761,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
         const okQ = !qq ? true : hay.includes(qq);
         return okStatus && okQ;
       })
-      .sort((a,b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+      .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
   }, [contacts, q, status]);
 
   const empty = { id: "", name: "", phone: "", email: "", company: "", status: "new", assigned_to_user_id: profile.id, notes: "" };
@@ -700,7 +794,12 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <select
+                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
+                           dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
                 <option value="all">Všetky</option>
                 <option value="new">Nové</option>
                 <option value="in_progress">Rozpracované</option>
@@ -724,7 +823,12 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label>Status</Label>
-                  <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={form.status} onChange={(e) => setForm(p => ({ ...p, status: e.target.value }))}>
+                  <select
+                    className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
+                               dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                    value={form.status}
+                    onChange={(e) => setForm(p => ({ ...p, status: e.target.value }))}
+                  >
                     <option value="new">Nové</option>
                     <option value="in_progress">Rozpracované</option>
                     <option value="called">Zavolané</option>
@@ -734,12 +838,27 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                 </div>
                 <div className="grid gap-2">
                   <Label>Priradiť</Label>
-                  <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={form.assigned_to_user_id} onChange={(e) => setForm(p => ({ ...p, assigned_to_user_id: e.target.value }))} disabled={!isAdmin}>
+                  <select
+                    className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm
+                               dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                    value={form.assigned_to_user_id}
+                    onChange={(e) => setForm(p => ({ ...p, assigned_to_user_id: e.target.value }))}
+                    disabled={!isAdmin}
+                  >
                     {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="grid gap-2"><Label>Poznámky</Label><textarea className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300" value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+              <div className="grid gap-2">
+                <Label>Poznámky</Label>
+                <textarea
+                  className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none
+                             focus:ring-2 focus:ring-zinc-300
+                             dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 dark:focus:ring-slate-700"
+                  value={form.notes}
+                  onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))}
+                />
+              </div>
               <div className="flex gap-2">
                 <Button onClick={() => { onUpsertContact({ ...form }); setDialogOpen(false); }}>Uložiť</Button>
                 {form.id && <Button variant="outline" onClick={() => { onDeleteContact(form.id); setDialogOpen(false); }}>Zmazať</Button>}
@@ -752,7 +871,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
       <Card>
         <CardHeader><CardTitle>Zoznam</CardTitle></CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200">
+          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
             <Table>
               <THead>
                 <Tr>
@@ -763,17 +882,17 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
               </THead>
               <TBody>
                 {visible.length === 0 ? (
-                  <Tr><Td colSpan={isAdmin ? 5 : 4} className="text-zinc-600">Žiadne kontakty.</Td></Tr>
+                  <Tr><Td colSpan={isAdmin ? 5 : 4} className="text-zinc-600 dark:text-slate-300">Žiadne kontakty.</Td></Tr>
                 ) : (
                   visible.map(c => (
                     <Tr key={c.id}>
                       <Td className="font-medium">
                         <button className="text-left hover:underline" onClick={() => openEdit(c)}>{c.name || "(bez mena)"}</button>
-                        {c.company ? <div className="text-xs text-zinc-600">{c.company}</div> : null}
+                        {c.company ? <div className="text-xs text-zinc-600 dark:text-slate-300">{c.company}</div> : null}
                       </Td>
                       <Td className="font-mono text-xs">{c.phone || "—"}</Td>
                       <Td><Badge>{c.status || "new"}</Badge></Td>
-                      {isAdmin && <Td className="text-sm text-zinc-600">{users.find(u => u.id === c.assigned_to_user_id)?.name || "—"}</Td>}
+                      {isAdmin && <Td className="text-sm text-zinc-600 dark:text-slate-300">{users.find(u => u.id === c.assigned_to_user_id)?.name || "—"}</Td>}
                       <Td className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button onClick={() => initiateCall(c)} disabled={!c.phone}><Phone className="h-4 w-4" /> Volaj</Button>
@@ -804,9 +923,9 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   const summaries = useMemo(() => {
     return who.map(u => {
       const rows = records.filter(r => r.user_id === u.id);
-      const minutes = rows.reduce((a,r) => a + (Number(r.minutes)||0), 0);
-      const successfulCalls = rows.reduce((a,r) => a + (Number(r.successful_calls)||0), 0);
-      const accounts = rows.reduce((a,r) => a + (Number(r.accounts)||0), 0);
+      const minutes = rows.reduce((a, r) => a + (Number(r.minutes) || 0), 0);
+      const successfulCalls = rows.reduce((a, r) => a + (Number(r.successful_calls) || 0), 0);
+      const accounts = rows.reduce((a, r) => a + (Number(r.accounts) || 0), 0);
       let bonus = 0;
       if (rules.bonusEnabled) {
         if (minutes >= rules.minutesThreshold) bonus += rules.minutesBonus;
@@ -819,8 +938,8 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   }, [who, records, rules]);
 
   const totals = useMemo(() => ({
-    sumTotal: summaries.reduce((a,s) => a + s.total, 0),
-    sumBonus: summaries.reduce((a,s) => a + s.bonus, 0),
+    sumTotal: summaries.reduce((a, s) => a + s.total, 0),
+    sumBonus: summaries.reduce((a, s) => a + s.bonus, 0),
   }), [summaries]);
 
   return (
@@ -832,9 +951,9 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Výplaty</CardTitle><div className="text-sm text-zinc-600">{monthStart} → {monthEnd}</div></CardHeader>
+        <CardHeader><CardTitle>Výplaty</CardTitle><div className="text-sm text-zinc-600 dark:text-slate-300">{monthStart} → {monthEnd}</div></CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200">
+          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
             <Table>
               <THead>
                 <Tr>
@@ -870,7 +989,7 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
       <Card>
         <CardHeader><CardTitle>Používatelia</CardTitle></CardHeader>
         <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200">
+          <div className="overflow-auto rounded-xl border border-zinc-200 dark:border-slate-800">
             <Table>
               <THead>
                 <Tr>
@@ -884,9 +1003,14 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
                 {profiles.map(u => (
                   <Tr key={u.id}>
                     <Td className="font-medium">{u.name}</Td>
-                    <Td className="text-zinc-600">{u.email}</Td>
+                    <Td className="text-zinc-600 dark:text-slate-300">{u.email}</Td>
                     <Td>
-                      <select className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm" value={u.role} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
+                      <select
+                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm
+                                   dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                        value={u.role}
+                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
+                      >
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
@@ -909,12 +1033,12 @@ function AdminUI({ profiles, settings, updateUser, updateSettings }) {
       <Card>
         <CardHeader><CardTitle>CloudTalk</CardTitle></CardHeader>
         <CardContent className="pt-2 space-y-3">
-          <div className="flex items-center justify-between rounded-xl border border-zinc-200 p-3">
+          <div className="flex items-center justify-between rounded-xl border border-zinc-200 p-3 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <div>
                 <div className="text-sm font-medium">Zapnúť CloudTalk</div>
-                <div className="text-xs text-zinc-600">Aktivuje „Volaj“.</div>
+                <div className="text-xs text-zinc-600 dark:text-slate-300">Aktivuje „Volaj“.</div>
               </div>
             </div>
             <Switch checked={!!cloudtalk.enabled} onCheckedChange={(v) => updateSettings({ cloudtalk: { ...cloudtalk, enabled: v } })} />

@@ -3,32 +3,50 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Rovnaký kľúč ako v App.jsx
 const REMEMBER_KEY = "mcrm_remember_login";
 
 function getRemember() {
   try {
-    return localStorage.getItem(REMEMBER_KEY) === "1";
+    const v = localStorage.getItem(REMEMBER_KEY);
+    return v === null ? true : v === "1";
   } catch {
-    return true; // fallback: bezpečnejšie default "remember"
+    return true;
   }
 }
 
-function pickStorage() {
-  // remember = localStorage (prežije zavretie prehliadača)
-  // no-remember = sessionStorage (zmaže sa po zavretí)
-  try {
-    return getRemember() ? window.localStorage : window.sessionStorage;
-  } catch {
-    return undefined;
-  }
-}
+// Storage proxy – vždy si vyberie aktuálne localStorage vs sessionStorage
+const storageProxy = {
+  getItem: (key) => {
+    try {
+      const st = getRemember() ? window.localStorage : window.sessionStorage;
+      return st.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      const st = getRemember() ? window.localStorage : window.sessionStorage;
+      st.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  },
+  removeItem: (key) => {
+    try {
+      const st = getRemember() ? window.localStorage : window.sessionStorage;
+      st.removeItem(key);
+    } catch {
+      // ignore
+    }
+  },
+};
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storage: pickStorage(),
+    storage: storageProxy,
   },
 });

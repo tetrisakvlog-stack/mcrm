@@ -15,7 +15,6 @@ export async function ensureProfile({ id, email, name }) {
   if (selErr) throw selErr;
   if (existing?.id) return;
 
-  // default values
   const { error } = await supabase.from("profiles").insert([
     {
       id,
@@ -24,9 +23,9 @@ export async function ensureProfile({ id, email, name }) {
       role: "user",
       base_salary: 700,
       active: true,
-      // alias / avatar_url nech sú pripravené (stĺpce si si pridal v SQL krokoch)
       alias: null,
       avatar_url: null,
+      advances: 0,
     },
   ]);
   if (error) throw error;
@@ -72,7 +71,6 @@ export async function deleteRecord({ userId, date }) {
 
 export async function listContacts({ assignedToUserId } = {}) {
   let q = supabase.from("contacts").select("*");
-  // filter len keď máme reálne uuid
   if (assignedToUserId) q = q.eq("assigned_to_user_id", assignedToUserId);
 
   const { data, error } = await q.order("updated_at", { ascending: false });
@@ -82,7 +80,6 @@ export async function listContacts({ assignedToUserId } = {}) {
 
 export async function upsertContact(contact) {
   const payload = { ...contact };
-  // pri novom kontakte NESMIE ísť id:""
   if (!payload.id) delete payload.id;
 
   const { data, error } = await supabase.from("contacts").upsert(payload).select("*");
@@ -92,6 +89,31 @@ export async function upsertContact(contact) {
 
 export async function deleteContact(id) {
   const { error } = await supabase.from("contacts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** =========================
+ *  CONTACT CALLS (LOG)
+ *  ========================= */
+
+export async function listContactCalls({ contactId, userId } = {}) {
+  let q = supabase.from("contact_calls").select("*");
+  if (contactId) q = q.eq("contact_id", contactId);
+  if (userId) q = q.eq("user_id", userId);
+  const { data, error } = await q.order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createContactCall(payload) {
+  // payload: { contact_id, user_id, channel, result, disposition, employment_status, trading_experience, potential, notes }
+  const { data, error } = await supabase.from("contact_calls").insert([payload]).select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateContactAfterCall({ contactId, patch }) {
+  const { error } = await supabase.from("contacts").update(patch).eq("id", contactId);
   if (error) throw error;
 }
 
@@ -112,9 +134,6 @@ export async function updateSettings(patch) {
 
 /** =========================
  *  PROFILE CHANGE REQUESTS
- *  (alias/avatar) – user žiada, admin schvaľuje
- *  Tabuľka: public.profile_change_requests
- *  Bucket: avatars (public)
  *  ========================= */
 
 export async function createProfileChangeRequest({ userId, kind, payload }) {
@@ -140,7 +159,6 @@ export async function listMyProfileChangeRequests(userId) {
 }
 
 export async function listPendingProfileChangeRequests() {
-  // Admin: uvidí všetky pending (RLS policy si už pridal)
   const { data, error } = await supabase
     .from("profile_change_requests")
     .select("*")
@@ -152,16 +170,9 @@ export async function listPendingProfileChangeRequests() {
 }
 
 export async function reviewProfileChangeRequest({ requestId, approve, note, adminUserId }) {
-  // 1) načítaj request
-  const { data: req, error: reqErr } = await supabase
-    .from("profile_change_requests")
-    .select("*")
-    .eq("id", requestId)
-    .single();
-
+  const { data: req, error: reqErr } = await supabase.from("profile_change_requests").select("*").eq("id", requestId).single();
   if (reqErr) throw reqErr;
 
-  // 2) update request status
   const newStatus = approve ? "approved" : "rejected";
   const { error: updErr } = await supabase
     .from("profile_change_requests")
@@ -175,7 +186,6 @@ export async function reviewProfileChangeRequest({ requestId, approve, note, adm
 
   if (updErr) throw updErr;
 
-  // 3) ak approve, zapíš do profiles alias/avatar_url
   if (approve) {
     if (req.kind === "alias") {
       const alias = (req.payload?.alias ?? "").toString().trim();

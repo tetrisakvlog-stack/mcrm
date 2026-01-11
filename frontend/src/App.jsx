@@ -132,6 +132,57 @@ function round2(n) {
 function safeStr(v) {
   return (v ?? "").toString();
 }
+function normalizeRank(r) {
+  const v = (r || "rookie").toLowerCase();
+  if (["rookie", "silver", "gold", "diamond", "manager", "root"].includes(v)) return v;
+  return "rookie";
+}
+
+function RankBadge({ rank }) {
+  const r = normalizeRank(rank);
+  const base = "inline-flex items-center gap-1 rounded-xl border px-2 py-1 text-xs font-semibold";
+
+  if (r === "root")
+    return (
+      <span className={`${base} border-zinc-300 bg-zinc-900 text-white`}>
+        <Crown className="h-3 w-3" /> Root
+      </span>
+    );
+
+  if (r === "manager")
+    return (
+      <span className={`${base} border-zinc-200 bg-zinc-100 text-zinc-900`}>
+        <Shield className="h-3 w-3" /> Manager
+      </span>
+    );
+
+  if (r === "diamond")
+    return (
+      <span className={`${base} border-zinc-200 bg-white text-zinc-900`}>
+        <Gem className="h-3 w-3" /> Diamond
+      </span>
+    );
+
+  if (r === "gold")
+    return (
+      <span className={`${base} border-zinc-200 bg-white text-zinc-900`}>
+        <DollarSign className="h-3 w-3" /> Gold
+      </span>
+    );
+
+  if (r === "silver")
+    return (
+      <span className={`${base} border-zinc-200 bg-white text-zinc-900`}>
+        <DollarSign className="h-3 w-3" /> Silver
+      </span>
+    );
+
+  return (
+    <span className={`${base} border-zinc-200 bg-white text-zinc-900`}>
+      <Star className="h-3 w-3" /> Nováčik
+    </span>
+  );
+}
 
 /** =========================
  *  Branding: Flame + MCRM
@@ -161,20 +212,25 @@ function BrandLockup({ className = "", size = 34, textClassName = "" }) {
   );
 }
 
-function Avatar({ url, name, size = 40 }) {
+function Avatar({ url, name, rank, size = 40 }) {
   const initials = (name || "U").trim().slice(0, 1).toUpperCase();
+
+  // automat: ak chceš neskôr obrázky podľa hodnosti, tu sa to dá doplniť
+  const finalUrl = url || null;
+
   return (
     <div
       className="rounded-2xl border border-zinc-200 bg-white overflow-hidden flex items-center justify-center"
       style={{ width: size, height: size }}
       title={name || ""}
     >
-      {url ? (
-        <img src={url} alt={name || "avatar"} className="w-full h-full object-cover" />
+      {finalUrl ? (
+        <img src={finalUrl} alt={name || "avatar"} className="w-full h-full object-cover" />
       ) : (
         <div className="flex flex-col items-center justify-center">
           <FlameMark size={Math.max(18, Math.floor(size * 0.55))} />
           <div className="text-[10px] font-bold tracking-[0.18em] text-zinc-900 -mt-1">{initials}</div>
+          {rank ? <div className="mt-1"><RankBadge rank={rank} /></div> : null}
         </div>
       )}
     </div>
@@ -431,20 +487,6 @@ export default function App() {
     }
   }
 
-  async function requestAvatarChange(file) {
-    if (!profile?.id) return;
-    if (!file) return toast.error("Vyber obrázok.");
-    if (!file.type?.startsWith("image/")) return toast.error("Súbor musí byť obrázok.");
-
-    try {
-      const url = await uploadAvatarFile({ userId: profile.id, file });
-      await createProfileChangeRequest({ userId: profile.id, kind: "avatar", payload: { avatar_url: url } });
-      toast.success("Žiadosť o avatar odoslaná (čaká na schválenie adminom).");
-      await refreshRequests();
-    } catch (e) {
-      toast.error(String(e?.message || e));
-    }
-  }
 
   async function adminReviewRequest(requestId, approve, note) {
     if (!profile?.id) return;
@@ -588,7 +630,7 @@ export default function App() {
       <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
-            <Avatar url={profile.avatar_url || null} name={displayName} size={40} />
+            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} size={40} />
 
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -646,7 +688,6 @@ export default function App() {
           myRequests={myRequests}
           pendingRequests={pendingRequests}
           requestAliasChange={requestAliasChange}
-          requestAvatarChange={requestAvatarChange}
           adminReviewRequest={adminReviewRequest}
           onUpsertRecord={async (userId, date, patch) => {
             try {
@@ -747,7 +788,6 @@ function MainTabs({
   myRequests,
   pendingRequests,
   requestAliasChange,
-  requestAvatarChange,
   adminReviewRequest,
   onUpsertRecord,
   onDeleteRecord,
@@ -781,7 +821,6 @@ function MainTabs({
           isAdmin={isAdmin}
           myRequests={myRequests}
           requestAliasChange={requestAliasChange}
-          requestAvatarChange={requestAvatarChange}
         />
       </TabsContent>
 
@@ -848,7 +887,7 @@ function MainTabs({
   );
 }
 
-function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmin, myRequests, requestAliasChange, requestAvatarChange }) {
+function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmin, myRequests, requestAliasChange }) {
   const [showEmail, setShowEmail] = useState(false);
   const [aliasDraft, setAliasDraft] = useState("");
 
@@ -874,7 +913,7 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
         <CardHeader className="flex items-center justify-between">
           <CardTitle>Profil</CardTitle>
           <div className="flex items-center gap-2">
-            <Avatar url={profile.avatar_url || null} name={displayName} size={40} />
+            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} size={40} />
           </div>
         </CardHeader>
 
@@ -894,6 +933,10 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
           </div>
 
           <Row label="Rola" value={profile.role} />
+          <div className="flex items-center justify-between">
+  <div className="text-sm text-zinc-600">Hodnosť</div>
+  <RankBadge rank={profile.rank} />
+</div>
           <Row label="CloudTalk agent_id" value={profile.cloudtalk_agent_id ?? "—"} />
 
           {isAdmin ? <Row label="Základná mzda" value={`${Number(profile.base_salary || 0)} €`} /> : null}
@@ -933,7 +976,7 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
           </div>
 
           <div className="pt-3 border-t border-zinc-100 space-y-3">
-            <div className="text-sm font-semibold">Alias & Avatar (schvaľuje admin)</div>
+            <div className="text-sm font-semibold">Alias (schvaľuje admin)</div>
 
             <div className="grid gap-2">
               <Label>Požiadať o zmenu aliasu</Label>
@@ -942,24 +985,6 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
                 <Button onClick={() => requestAliasChange(aliasDraft)}>
                   <Pencil className="h-4 w-4" /> Odoslať
                 </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Požiadať o zmenu avatara</Label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) requestAvatarChange(f);
-                    e.target.value = "";
-                  }}
-                />
-                <div className="text-xs text-zinc-600 inline-flex items-center gap-1">
-                  <ImageIcon className="h-4 w-4" /> obrázok (png/jpg/webp)
-                </div>
               </div>
             </div>
 
@@ -2188,6 +2213,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                   <Th>Avatar</Th>
                   <Th>Meno/Alias</Th>
                   <Th>Email</Th>
+                  <Th>Hodnosť</Th>
                   <Th>Rola</Th>
                   <Th className="text-right">Základ (€)</Th>
                   <Th className="text-right">agent_id</Th>
@@ -2199,7 +2225,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                 {profiles.map((u) => (
                   <Tr key={u.id}>
                     <Td>
-                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} size={36} />
+                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} size={36} />
                     </Td>
                     <Td className="font-medium">{u.alias || u.name}</Td>
                     <Td className="text-zinc-600">{u.email}</Td>
@@ -2211,6 +2237,20 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                       >
                         <option value="user">user</option>
                         <option value="admin">admin</option>
+                      </select>
+                    </Td>
+                    <Td>
+                      <select
+                       className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
+                      value={u.rank || "rookie"}
+                      onChange={(e) => updateUser(u.id, { rank: e.target.value })}
+                      >
+                        <option value="rookie">Rookie</option>
+                        <option value="silver">Silver</option>
+                        <option value="gold">Gold</option>
+                        <option value="diamond">Diamond</option>
+                        <option value="manager">Manager</option>
+                        <option value="root">Root</option>
                       </select>
                     </Td>
                     <Td className="text-right">

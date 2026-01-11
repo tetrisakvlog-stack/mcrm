@@ -67,7 +67,6 @@ import {
   listMyProfileChangeRequests,
   listPendingProfileChangeRequests,
   reviewProfileChangeRequest,
-  uploadAvatarFile,
 } from "./lib/db.js";
 
 /** =========================

@@ -1,4 +1,6 @@
-// App.jsx (celý súbor) – pridané: “Výplata po zálohách” pod Aktuálna/Zálohy
+// App.jsx (celý súbor)
+// OPRAVA: vrátený admin panel "Zálohy (admin)" do záložky Výplaty + ponechané "Výplata po zálohách" v Môj profil
+// Pozn.: používa profiles.advances (number). DB stĺpec musí existovať.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
@@ -232,9 +234,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(REMEMBER_KEY, rememberLogin ? "1" : "0");
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [rememberLogin]);
 
   useEffect(() => {
@@ -279,13 +279,10 @@ export default function App() {
         setProfile(my);
         setSettings(await getSettings());
 
-        // requests
         try {
           const mine = await listMyProfileChangeRequests(u.id);
           if (!cancelled) setMyRequests(mine);
-        } catch (e) {
-          // ignore
-        }
+        } catch {}
       } catch (e) {
         toast.error(String(e?.message || e));
       } finally {
@@ -332,9 +329,7 @@ export default function App() {
         try {
           const pending = await listPendingProfileChangeRequests();
           if (!cancelled) setPendingRequests(pending);
-        } catch {
-          // ignore
-        }
+        } catch {}
       } catch (e) {
         toast.error(String(e?.message || e));
       }
@@ -583,7 +578,6 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
             <Avatar url={profile.avatar_url || null} name={displayName} size={40} />
-
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="font-semibold truncate">{displayName}</div>
@@ -636,7 +630,7 @@ export default function App() {
           records={records}
           contacts={contacts}
           settings={settings}
-          refreshData={refreshData}
+          refreshData={() => refreshData()}
           myRequests={myRequests}
           pendingRequests={pendingRequests}
           requestAliasChange={requestAliasChange}
@@ -813,6 +807,7 @@ function MainTabs({
           settings={settings}
           monthStart={monthStart}
           monthEnd={monthEnd}
+          updateUser={updateUser}
         />
       </TabsContent>
 
@@ -842,7 +837,17 @@ function MainTabs({
   );
 }
 
-function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmin, myRequests, requestAliasChange, requestAvatarChange }) {
+function MyProfile({
+  profile,
+  displayName,
+  records,
+  monthStart,
+  monthEnd,
+  isAdmin,
+  myRequests,
+  requestAliasChange,
+  requestAvatarChange,
+}) {
   const [showEmail, setShowEmail] = useState(false);
   const [aliasDraft, setAliasDraft] = useState("");
 
@@ -895,7 +900,6 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
           <div className="pt-3 border-t border-zinc-100 space-y-2">
             <Row label="Odchodené dni / pracovné dni" value={`${presentDays} / ${workdaysInMonth}`} />
 
-            {/* Aktuálna výplata (zelená + šípka hore) */}
             <Row
               label="Aktuálna výplata podľa dochádzky"
               value={
@@ -906,7 +910,6 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
               }
             />
 
-            {/* Zálohy (červená + šípka dole) */}
             <Row
               label="Zálohy"
               value={
@@ -916,15 +919,10 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
               }
             />
 
-            {/* Nové: výplata po zálohách */}
             <Row
               label="Výplata po zálohách"
               value={
-                <span
-                  className={`inline-flex items-center gap-1 font-semibold ${
-                    netPay >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
-                >
+                <span className={`inline-flex items-center gap-1 font-semibold ${netPay >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                   {netPay >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                   {netPay} €
                 </span>
@@ -1498,7 +1496,10 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
   );
 }
 
-function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd }) {
+/** =========================
+ *  Salary + Advances (admin panel inside Salary tab)
+ *  ========================= */
+function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd, updateUser }) {
   const rules = settings?.salary_rules || {
     bonusEnabled: true,
     minutesThreshold: 1200,
@@ -1536,8 +1537,98 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
     [summaries]
   );
 
+  // --- Admin advances panel state ---
+  const activeUsers = useMemo(() => (profiles || []).filter((p) => !!p.active), [profiles]);
+  const [advUserId, setAdvUserId] = useState(profile?.id || "");
+  const selectedUser = useMemo(() => activeUsers.find((u) => u.id === advUserId) || null, [activeUsers, advUserId]);
+
+  const [advValue, setAdvValue] = useState(() => {
+    const u = activeUsers.find((x) => x.id === (profile?.id || ""));
+    return u?.advances ?? 0;
+  });
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!advUserId && profile?.id) setAdvUserId(profile.id);
+  }, [isAdmin, advUserId, profile?.id]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!selectedUser) return;
+    setAdvValue(selectedUser.advances ?? 0);
+  }, [isAdmin, selectedUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveAdvances() {
+    if (!isAdmin) return;
+    if (!advUserId) return toast.error("Vyber používateľa.");
+    const v = Number(advValue) || 0;
+    try {
+      await updateUser(advUserId, { advances: v });
+      toast.success("Zálohy uložené.");
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+
+  async function resetAdvances() {
+    if (!isAdmin) return;
+    if (!advUserId) return toast.error("Vyber používateľa.");
+    try {
+      await updateUser(advUserId, { advances: 0 });
+      setAdvValue(0);
+      toast.success("Zálohy vynulované.");
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {isAdmin ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Zálohy (admin)</CardTitle>
+            <div className="text-sm text-zinc-600">
+              Zadáš sumu vyplatených záloh pre používateľa. Zobrazí sa v „Môj profil: Zálohy“.
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Používateľ</Label>
+                <select
+                  className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                  value={advUserId}
+                  onChange={(e) => setAdvUserId(e.target.value)}
+                >
+                  {activeUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.alias || u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Vyplatené zálohy (€)</Label>
+                <Input inputMode="numeric" value={advValue} onChange={(e) => setAdvValue(e.target.value)} placeholder="0" />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={saveAdvances}>Uložiť zálohy</Button>
+              <Button variant="outline" onClick={resetAdvances}>
+                Vynulovať
+              </Button>
+            </div>
+
+            <div className="text-xs text-zinc-500">
+              Pozn.: používa sa stĺpec <span className="font-mono">profiles.advances</span> (number).
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat icon={Calculator} label="Výplaty spolu" value={`${totals.sumTotal} €`} />
         <Stat icon={Calculator} label="Bonusy spolu" value={`${totals.sumBonus} €`} />
@@ -1638,7 +1729,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                 ) : (
                   pending.map((r) => {
                     const u = profiles.find((p) => p.id === r.user_id);
-                    const who = u ? (u.alias || u.name) : r.user_id;
+                    const who = u ? u.alias || u.name : r.user_id;
                     const val =
                       r.kind === "alias"
                         ? safeStr(r.payload?.alias)

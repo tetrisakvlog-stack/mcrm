@@ -1,232 +1,329 @@
 import { supabase } from "./supabase";
 
 /** =========================
- *  PROFILES
+ *  Small helpers
  *  ========================= */
-
-export async function getMyProfile(userId) {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
-  if (error) throw error;
-  return data;
+function throwIfError(res) {
+  if (res?.error) throw res.error;
+  return res.data;
 }
 
-export async function ensureProfile({ id, email, name }) {
-  const { data: existing, error: selErr } = await supabase.from("profiles").select("id").eq("id", id).maybeSingle();
-  if (selErr) throw selErr;
-  if (existing?.id) return;
+function shallowMerge(a, b) {
+  const out = { ...(a || {}) };
+  for (const k of Object.keys(b || {})) {
+    const v = b[k];
+    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
+      out[k] = { ...out[k], ...v };
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
 
-  const { error } = await supabase.from("profiles").insert([
-    {
-      id,
-      email,
-      name,
-      role: "user",
-      base_salary: 700,
-      active: true,
-      alias: null,
-      avatar_url: null,
-      advances: 0,
-    },
-  ]);
-  if (error) throw error;
+/** =========================
+ *  Profiles
+ *  ========================= */
+export async function ensureProfile({ id, email, name }) {
+  if (!id) throw new Error("ensureProfile: missing id");
+  const payload = {
+    id,
+    email: email || null,
+    name: name || "User",
+  };
+
+  // do not overwrite role/active/base_salary etc.
+  const res = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+  throwIfError(res);
+}
+
+export async function getMyProfile(userId) {
+  const res = await supabase.from("profiles").select("*").eq("id", userId).single();
+  return throwIfError(res);
 }
 
 export async function listProfiles() {
-  const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: true });
-  if (error) throw error;
-  return data;
+  const res = await supabase.from("profiles").select("*").order("created_at", { ascending: true });
+  return throwIfError(res) || [];
 }
 
 export async function updateProfile(id, patch) {
-  const { error } = await supabase.from("profiles").update(patch).eq("id", id);
-  if (error) throw error;
+  const res = await supabase.from("profiles").update(patch).eq("id", id).select("*").single();
+  return throwIfError(res);
 }
 
 /** =========================
- *  RECORDS (dochádzka & KPI)
+ *  Records (attendance + KPI)
  *  ========================= */
-
-export async function listRecords({ userId, from, to }) {
+export async function listRecords({ userId = null, from, to }) {
   let q = supabase.from("records").select("*").gte("date", from).lte("date", to).order("date", { ascending: false });
   if (userId) q = q.eq("user_id", userId);
-  const { data, error } = await q;
-  if (error) throw error;
-  return data;
+  const res = await q;
+  return throwIfError(res) || [];
 }
 
 export async function upsertRecord({ userId, date, present, minutes, successful_calls, accounts }) {
-  const payload = { user_id: userId, date, present, minutes, successful_calls, accounts };
-  const { error } = await supabase.from("records").upsert(payload, { onConflict: "user_id,date" });
-  if (error) throw error;
+  const payload = {
+    user_id: userId,
+    date,
+    present: !!present,
+    minutes: Number(minutes) || 0,
+    successful_calls: Number(successful_calls) || 0,
+    accounts: Number(accounts) || 0,
+  };
+  const res = await supabase.from("records").upsert(payload, { onConflict: "user_id,date" }).select("*");
+  return throwIfError(res);
 }
 
 export async function deleteRecord({ userId, date }) {
-  const { error } = await supabase.from("records").delete().eq("user_id", userId).eq("date", date);
-  if (error) throw error;
+  const res = await supabase.from("records").delete().eq("user_id", userId).eq("date", date);
+  throwIfError(res);
 }
 
 /** =========================
- *  CONTACTS
+ *  Contacts
  *  ========================= */
-
-export async function listContacts({ assignedToUserId } = {}) {
-  let q = supabase.from("contacts").select("*");
+export async function listContacts({ assignedToUserId = null } = {}) {
+  let q = supabase.from("contacts").select("*").order("updated_at", { ascending: false });
   if (assignedToUserId) q = q.eq("assigned_to_user_id", assignedToUserId);
-
-  const { data, error } = await q.order("updated_at", { ascending: false });
-  if (error) throw error;
-  return data || [];
+  const res = await q;
+  return throwIfError(res) || [];
 }
 
 export async function upsertContact(contact) {
-  const payload = { ...contact };
-  if (!payload.id) delete payload.id;
+  const c = { ...(contact || {}) };
 
-  const { data, error } = await supabase.from("contacts").upsert(payload).select("*");
-  if (error) throw error;
-  return data?.[0] ?? null;
+  // normalize empty strings -> null for some optional fields
+  const nullable = [
+    "email",
+    "company",
+    "notes",
+    "employment_status",
+    "sales_experience",
+    "client_potential",
+    "next_call_at",
+    "last_call_at",
+    "last_outcome",
+    "last_attitude",
+    "last_notes",
+  ];
+  for (const k of nullable) {
+    if (k in c && (c[k] === "" || c[k] === undefined)) c[k] = null;
+  }
+
+  // If no id => INSERT (let DB generate uuid)
+  if (!c.id) {
+    delete c.id;
+    const res = await supabase.from("contacts").insert(c).select("*").single();
+    return throwIfError(res);
+  }
+
+  // With id => UPSERT
+  const res = await supabase.from("contacts").upsert(c, { onConflict: "id" }).select("*").single();
+  return throwIfError(res);
 }
 
 export async function deleteContact(id) {
-  const { error } = await supabase.from("contacts").delete().eq("id", id);
-  if (error) throw error;
+  const res = await supabase.from("contacts").delete().eq("id", id);
+  throwIfError(res);
 }
 
 /** =========================
- *  CONTACT CALLS (LOG)
+ *  Contact calls log
  *  ========================= */
-
 export async function listContactCalls(contactId) {
-  const { data, error } = await supabase
+  const res = await supabase
     .from("contact_calls")
     .select("*")
     .eq("contact_id", contactId)
     .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data || [];
+  return throwIfError(res) || [];
 }
 
-export async function createContactCall({ contactId, userId, outcome, attitude, notes }) {
-  const { data, error } = await supabase
-    .from("contact_calls")
-    .insert([
-      {
-        contact_id: contactId,
-        user_id: userId,
-        outcome: outcome || null,
-        attitude: attitude || null,
-        notes: notes || null,
-      },
-    ])
-    .select("*")
-    .single();
+export async function createContactCall({ contactId, userId, outcome = null, attitude = null, notes = null }) {
+  const payload = {
+    contact_id: contactId,
+    user_id: userId,
+    outcome,
+    attitude,
+    notes,
+  };
+  const res = await supabase.from("contact_calls").insert(payload).select("*").single();
+  return throwIfError(res);
+}
 
-  if (error) throw error;
-  return data;
+/**
+ * Compatibility export (your App.jsx import expects this).
+ * This function logs a call and updates the contact in one place.
+ *
+ * Supported signatures:
+ * 1) updateContactAfterCall({ contactId, userId, outcome, attitude, notes, contactPatch })
+ * 2) updateContactAfterCall({ contactId, userId, call: { outcome, attitude, notes }, contactPatch })
+ */
+export async function updateContactAfterCall(args) {
+  const contactId = args?.contactId || args?.contact_id;
+  const userId = args?.userId || args?.user_id;
+
+  const call = args?.call || {};
+  const outcome = args?.outcome ?? call?.outcome ?? null;
+  const attitude = args?.attitude ?? call?.attitude ?? null;
+  const notes = args?.notes ?? call?.notes ?? null;
+
+  const contactPatch = args?.contactPatch || args?.contact_patch || {};
+
+  if (!contactId) throw new Error("updateContactAfterCall: missing contactId");
+  if (!userId) throw new Error("updateContactAfterCall: missing userId");
+
+  // 1) create log
+  await createContactCall({ contactId, userId, outcome, attitude, notes });
+
+  // 2) update contact
+  const res = await supabase.from("contacts").update(contactPatch).eq("id", contactId).select("*").single();
+  return throwIfError(res);
 }
 
 /** =========================
- *  SETTINGS
+ *  Settings
  *  ========================= */
+const DEFAULT_SETTINGS = {
+  cloudtalk: { enabled: false, backendUrl: "" },
+  salary_rules: {
+    bonusEnabled: true,
+    minutesThreshold: 1200,
+    minutesBonus: 50,
+    successfulCallsThreshold: 60,
+    successfulCallsBonus: 100,
+    accountsThreshold: 10,
+    accountsBonus: 150,
+  },
+};
 
 export async function getSettings() {
-  const { data, error } = await supabase.from("settings").select("*").eq("id", "global").single();
-  if (error) throw error;
-  return data;
+  // assume single-row table "settings" with id=1
+  const res = await supabase.from("settings").select("*").eq("id", 1).maybeSingle();
+  const row = throwIfError(res);
+
+  if (row) {
+    return {
+      ...row,
+      cloudtalk: row.cloudtalk ?? DEFAULT_SETTINGS.cloudtalk,
+      salary_rules: row.salary_rules ?? DEFAULT_SETTINGS.salary_rules,
+    };
+  }
+
+  // if empty, seed defaults
+  const ins = await supabase
+    .from("settings")
+    .insert({ id: 1, cloudtalk: DEFAULT_SETTINGS.cloudtalk, salary_rules: DEFAULT_SETTINGS.salary_rules })
+    .select("*")
+    .single();
+  return throwIfError(ins);
 }
 
 export async function updateSettings(patch) {
-  const { error } = await supabase.from("settings").upsert({ id: "global", ...patch }, { onConflict: "id" });
-  if (error) throw error;
-}
+  const current = await getSettings();
+  const merged = shallowMerge(current, patch);
 
-/** =========================
- *  PROFILE CHANGE REQUESTS (alias/avatar)
- *  ========================= */
-
-export async function createProfileChangeRequest({ userId, kind, payload }) {
-  const { data, error } = await supabase
-    .from("profile_change_requests")
-    .insert([{ user_id: userId, kind, payload, status: "pending" }])
+  // keep only known top-level keys if you want strictness; for now, update whatever is passed
+  const res = await supabase
+    .from("settings")
+    .update({
+      cloudtalk: merged.cloudtalk,
+      salary_rules: merged.salary_rules,
+    })
+    .eq("id", 1)
     .select("*")
     .single();
 
-  if (error) throw error;
-  return data;
+  return throwIfError(res);
+}
+
+/** =========================
+ *  Profile change requests (alias/avatar)
+ *  ========================= */
+export async function createProfileChangeRequest({ userId, kind, payload }) {
+  const res = await supabase
+    .from("profile_change_requests")
+    .insert({
+      user_id: userId,
+      kind,
+      payload: payload || {},
+      status: "pending",
+    })
+    .select("*")
+    .single();
+  return throwIfError(res);
 }
 
 export async function listMyProfileChangeRequests(userId) {
-  const { data, error } = await supabase
+  const res = await supabase
     .from("profile_change_requests")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data || [];
+  return throwIfError(res) || [];
 }
 
 export async function listPendingProfileChangeRequests() {
-  const { data, error } = await supabase
+  const res = await supabase
     .from("profile_change_requests")
     .select("*")
     .eq("status", "pending")
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data || [];
+    .order("created_at", { ascending: true });
+  return throwIfError(res) || [];
 }
 
-export async function reviewProfileChangeRequest({ requestId, approve, note, adminUserId }) {
-  const { data: req, error: reqErr } = await supabase.from("profile_change_requests").select("*").eq("id", requestId).single();
-  if (reqErr) throw reqErr;
+export async function reviewProfileChangeRequest({ requestId, approve, note = "", adminUserId }) {
+  // load request
+  const reqRes = await supabase.from("profile_change_requests").select("*").eq("id", requestId).single();
+  const req = throwIfError(reqRes);
 
-  const newStatus = approve ? "approved" : "rejected";
-  const { error: updErr } = await supabase
+  const status = approve ? "approved" : "rejected";
+
+  // update request status
+  const updReq = await supabase
     .from("profile_change_requests")
     .update({
-      status: newStatus,
-      note: note || null,
+      status,
       reviewed_by: adminUserId || null,
       reviewed_at: new Date().toISOString(),
+      note: note || null,
     })
     .eq("id", requestId);
+  throwIfError(updReq);
 
-  if (updErr) throw updErr;
-
+  // apply to profile if approved
   if (approve) {
     if (req.kind === "alias") {
-      const alias = (req.payload?.alias ?? "").toString().trim();
-      await updateProfile(req.user_id, { alias: alias || null });
+      const alias = req.payload?.alias ?? null;
+      if (alias) await updateProfile(req.user_id, { alias });
     }
     if (req.kind === "avatar") {
-      const avatar_url = (req.payload?.avatar_url ?? "").toString().trim();
-      await updateProfile(req.user_id, { avatar_url: avatar_url || null });
+      const avatar_url = req.payload?.avatar_url ?? null;
+      if (avatar_url) await updateProfile(req.user_id, { avatar_url });
     }
   }
 
-  return { ...req, status: newStatus };
+  return true;
 }
 
+/** =========================
+ *  Avatar upload
+ *  ========================= */
 export async function uploadAvatarFile({ userId, file }) {
-  if (!file) throw new Error("Chýba súbor.");
-  if (!userId) throw new Error("Chýba userId.");
+  const bucket = "avatars";
+  const ext = (file?.name || "avatar").split(".").pop() || "png";
+  const path = `${userId}/${Date.now()}_${Math.random().toString(16).slice(2)}.${ext}`;
 
-  const ext = (file.name || "png").split(".").pop() || "png";
-  const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
-  const path = `${userId}/${Date.now()}_${Math.random().toString(16).slice(2)}.${safeExt}`;
-
-  const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, {
-    upsert: false,
+  const up = await supabase.storage.from(bucket).upload(path, file, {
     cacheControl: "3600",
-    contentType: file.type || "image/png",
+    upsert: true,
+    contentType: file?.type || "image/*",
   });
-  if (upErr) throw upErr;
+  throwIfError(up);
 
-  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-  const url = data?.publicUrl;
-  if (!url) throw new Error("Nepodarilo sa získať URL avatara.");
-
+  const pub = supabase.storage.from(bucket).getPublicUrl(path);
+  const url = pub?.data?.publicUrl;
+  if (!url) throw new Error("Nepodarilo sa získať public URL avatara.");
   return url;
 }

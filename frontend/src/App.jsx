@@ -550,7 +550,32 @@ export default function App() {
       </div>
     );
   }
+// BLOCK: user must be approved by Root/admin
+if (session?.user?.id && profile && profile.approved === false) {
+  return (
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="max-w-md mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Čaká na schválenie</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-zinc-700">
+            <div>Tvoj účet bol vytvorený, ale ešte nebol schválený Rootom.</div>
+            <div className="text-xs text-zinc-600">
+              Po schválení sa môžeš normálne prihlásiť a používať systém.
+            </div>
 
+            <Button className="w-full" variant="outline" onClick={logout}>
+              Odhlásiť
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Toaster position="top-right" />
+    </div>
+  );
+}
   if (!session?.user?.id || !profile) {
     return (
       <div className="min-h-screen p-4 md:p-8">

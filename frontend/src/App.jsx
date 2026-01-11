@@ -16,6 +16,8 @@ import {
   X,
   Image as ImageIcon,
   Pencil,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import {
   Badge,
@@ -861,6 +863,10 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
     return round2(base * ratio);
   }, [profile.base_salary, presentDays, workdaysInMonth]);
 
+  // Zálohy – zatiaľ berieme z profilu (ak stĺpec neexistuje, bude to 0)
+  const advances = useMemo(() => Number(profile.advances || 0), [profile.advances]);
+  const fmtEur = (n) => `${round2(Number(n) || 0)} €`;
+
   const pendingMine = useMemo(() => (myRequests || []).filter((r) => r.status === "pending"), [myRequests]);
 
   return (
@@ -895,10 +901,28 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
           <div className="pt-3 border-t border-zinc-100 space-y-2">
             <Row label="Odchodené dni / pracovné dni" value={`${presentDays} / ${workdaysInMonth}`} />
-            <Row label="Aktuálna výplata podľa dochádzky" value={`${currentPay} €`} />
-            <div className="text-xs text-zinc-600">
-              Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.
-            </div>
+
+            <Row
+              label="Aktuálna výplata podľa dochádzky"
+              value={
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
+                  <TrendingUp className="h-4 w-4" />
+                  {fmtEur(currentPay)}
+                </span>
+              }
+            />
+
+            <Row
+              label="Zálohy"
+              value={
+                <span className="inline-flex items-center gap-1 text-rose-600 font-semibold">
+                  <TrendingDown className="h-4 w-4" />
+                  -{fmtEur(Math.abs(advances))}
+                </span>
+              }
+            />
+
+            <div className="text-xs text-zinc-600">Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.</div>
           </div>
 
           <div className="pt-3 border-t border-zinc-100 space-y-3">
@@ -1019,9 +1043,7 @@ function AdminMissingAttendancePanel({ profiles, records, onConfirm }) {
         </div>
       </CardHeader>
       <CardContent className="pt-2 space-y-3">
-        <div className="text-xs text-zinc-600">
-          Dôvod je iba informačný v rozhraní (neukladá sa), aby sa nemenila databáza.
-        </div>
+        <div className="text-xs text-zinc-600">Dôvod je iba informačný v rozhraní (neukladá sa), aby sa nemenila databáza.</div>
 
         <div className="space-y-2">
           {missing.map((u) => (
@@ -1436,7 +1458,11 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                         <Badge>{c.status || "new"}</Badge>
                       </Td>
                       {isAdmin && (
-                        <Td className="text-sm text-zinc-600">{users.find((u) => u.id === c.assigned_to_user_id)?.alias || users.find((u) => u.id === c.assigned_to_user_id)?.name || "—"}</Td>
+                        <Td className="text-sm text-zinc-600">
+                          {users.find((u) => u.id === c.assigned_to_user_id)?.alias ||
+                            users.find((u) => u.id === c.assigned_to_user_id)?.name ||
+                            "—"}
+                        </Td>
                       )}
                       <Td className="text-right">
                         <div className="flex justify-end gap-2">

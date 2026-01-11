@@ -27,12 +27,6 @@ function shallowMerge(a, b) {
 export async function ensureProfile({ id, email, name }) {
   if (!id) throw new Error("ensureProfile: missing id");
 
-  // 1) Ak profil existuje, NIC nemeníme (hlavne nie approved)
-  const existingRes = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
-  const existing = throwIfError(existingRes);
-  if (existing) return existing;
-
-  // 2) Ak profil neexistuje, vytvoríme ho ako neschválený
   const payload = {
     id,
     email: email || null,
@@ -40,10 +34,17 @@ export async function ensureProfile({ id, email, name }) {
     role: "user",
     active: true,
     approved: false,
+    deleted: false,
   };
 
-  const insRes = await supabase.from("profiles").insert(payload).select("*").single();
-  return throwIfError(insRes);
+  // INSERT only. Ak už existuje, ignoruj duplicate a nič nemeníš.
+  const res = await supabase.from("profiles").insert(payload);
+  if (res.error) {
+    // duplicate key -> profil už existuje (OK)
+    if (res.error.code === "23505") return null;
+    throw res.error;
+  }
+  return null;
 }
 
 export async function getMyProfile(userId) {

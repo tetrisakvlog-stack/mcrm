@@ -16,6 +16,12 @@ import {
   X,
   Image as ImageIcon,
   Pencil,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Gem,
+  Crown,
+  Star,
 } from "lucide-react";
 import {
   Badge,

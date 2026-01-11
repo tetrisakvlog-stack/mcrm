@@ -901,9 +901,33 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
           <div className="pt-3 border-t border-zinc-100 space-y-2">
             <Row label="Odchodené dni / pracovné dni" value={`${presentDays} / ${workdaysInMonth}`} />
-            <Row label="Aktuálna výplata podľa dochádzky" value={`${currentPay} €`} />
-            <Row label="Zálohy" value={`${advances} €`} />
-            <Row label="Výplata po zálohách" value={`${payAfterAdvances} €`} />
+            <div className="flex items-center justify-between">
+  <div className="text-sm text-zinc-600">Aktuálna výplata podľa dochádzky</div>
+  <div className="text-sm font-medium text-emerald-600 inline-flex items-center gap-1">
+    <TrendingUp className="h-4 w-4" />
+    {currentPay} €
+  </div>
+</div>
+
+<div className="flex items-center justify-between">
+  <div className="text-sm text-zinc-600">Zálohy</div>
+  <div className="text-sm font-medium text-rose-600 inline-flex items-center gap-1">
+    <TrendingDown className="h-4 w-4" />
+    {advances} €
+  </div>
+</div>
+
+<div className="flex items-center justify-between">
+  <div className="text-sm text-zinc-600">Výplata po zálohách</div>
+  <div
+    className={`text-sm font-medium inline-flex items-center gap-1 ${
+      payAfterAdvances >= 0 ? "text-emerald-600" : "text-rose-600"
+    }`}
+  >
+    {payAfterAdvances >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+    {payAfterAdvances} €
+  </div>
+</div>
             <div className="text-xs text-zinc-600">
               Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.
             </div>

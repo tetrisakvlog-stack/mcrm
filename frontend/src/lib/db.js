@@ -96,25 +96,34 @@ export async function deleteContact(id) {
  *  CONTACT CALLS (LOG)
  *  ========================= */
 
-export async function listContactCalls({ contactId, userId } = {}) {
-  let q = supabase.from("contact_calls").select("*");
-  if (contactId) q = q.eq("contact_id", contactId);
-  if (userId) q = q.eq("user_id", userId);
-  const { data, error } = await q.order("created_at", { ascending: false });
+export async function listContactCalls(contactId) {
+  const { data, error } = await supabase
+    .from("contact_calls")
+    .select("*")
+    .eq("contact_id", contactId)
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
 }
 
-export async function createContactCall(payload) {
-  // payload: { contact_id, user_id, channel, result, disposition, employment_status, trading_experience, potential, notes }
-  const { data, error } = await supabase.from("contact_calls").insert([payload]).select("*").single();
+export async function createContactCall({ contactId, userId, outcome, attitude, notes }) {
+  const { data, error } = await supabase
+    .from("contact_calls")
+    .insert([
+      {
+        contact_id: contactId,
+        user_id: userId,
+        outcome: outcome || null,
+        attitude: attitude || null,
+        notes: notes || null,
+      },
+    ])
+    .select("*")
+    .single();
+
   if (error) throw error;
   return data;
-}
-
-export async function updateContactAfterCall({ contactId, patch }) {
-  const { error } = await supabase.from("contacts").update(patch).eq("id", contactId);
-  if (error) throw error;
 }
 
 /** =========================
@@ -133,7 +142,7 @@ export async function updateSettings(patch) {
 }
 
 /** =========================
- *  PROFILE CHANGE REQUESTS
+ *  PROFILE CHANGE REQUESTS (alias/avatar)
  *  ========================= */
 
 export async function createProfileChangeRequest({ userId, kind, payload }) {

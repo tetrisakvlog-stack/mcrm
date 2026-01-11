@@ -281,9 +281,7 @@ export default function App() {
         try {
           const mine = await listMyProfileChangeRequests(u.id);
           if (!cancelled) setMyRequests(mine);
-        } catch (e) {
-          // ak ešte nemáš tabuľku / policies, nech to nepadá celé UI
-        }
+        } catch (e) {}
       } catch (e) {
         toast.error(String(e?.message || e));
       } finally {
@@ -330,9 +328,7 @@ export default function App() {
         try {
           const pending = await listPendingProfileChangeRequests();
           if (!cancelled) setPendingRequests(pending);
-        } catch {
-          // ignore if not set up yet
-        }
+        } catch {}
       } catch (e) {
         toast.error(String(e?.message || e));
       }
@@ -345,11 +341,9 @@ export default function App() {
   async function login() {
     const email = authForm.email.trim().toLowerCase();
     const password = authForm.password;
-
     try {
       localStorage.setItem(REMEMBER_KEY, rememberLogin ? "1" : "0");
     } catch {}
-
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return toast.error(error.message);
   }
@@ -359,11 +353,9 @@ export default function App() {
     const email = authForm.email.trim().toLowerCase();
     const password = authForm.password;
     if (!name) return toast.error("Zadaj meno.");
-
     try {
       localStorage.setItem(REMEMBER_KEY, rememberLogin ? "1" : "0");
     } catch {}
-
     const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
     if (error) return toast.error(error.message);
     toast.success("Registrácia OK. Ak máš zapnutý email confirm, potvrď email.");
@@ -378,16 +370,12 @@ export default function App() {
     try {
       const mine = await listMyProfileChangeRequests(profile.id);
       setMyRequests(mine);
-    } catch {
-      // ignore
-    }
+    } catch {}
     if (isAdmin) {
       try {
         const pending = await listPendingProfileChangeRequests();
         setPendingRequests(pending);
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
   }
 
@@ -404,10 +392,7 @@ export default function App() {
       setContacts(c);
       setSettings(s);
 
-      // refresh profiles for admin
       if (isAdmin) setProfiles(await listProfiles());
-
-      // refresh my profile (alias/avatar may change after approval)
       setProfile(await getMyProfile(profile.id));
 
       await refreshRequests();
@@ -435,7 +420,6 @@ export default function App() {
     if (!profile?.id) return;
     if (!file) return toast.error("Vyber obrázok.");
     if (!file.type?.startsWith("image/")) return toast.error("Súbor musí byť obrázok.");
-
     try {
       const url = await uploadAvatarFile({ userId: profile.id, file });
       await createProfileChangeRequest({ userId: profile.id, kind: "avatar", payload: { avatar_url: url } });
@@ -516,21 +500,13 @@ export default function App() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-3">
-                <Button
-                  variant={authMode === "login" ? "primary" : "outline"}
-                  className="w-[130px]"
-                  onClick={() => setAuthMode("login")}
-                >
+                <Button variant={authMode === "login" ? "primary" : "outline"} className="w-[130px]" onClick={() => setAuthMode("login")}>
                   Prihlásiť
                 </Button>
 
                 <BrandLockup size={34} />
 
-                <Button
-                  variant={authMode === "register" ? "primary" : "outline"}
-                  className="w-[130px]"
-                  onClick={() => setAuthMode("register")}
-                >
+                <Button variant={authMode === "register" ? "primary" : "outline"} className="w-[130px]" onClick={() => setAuthMode("register")}>
                   Registrovať
                 </Button>
               </div>
@@ -540,21 +516,13 @@ export default function App() {
               {authMode === "register" && (
                 <div className="space-y-2">
                   <Label>Meno</Label>
-                  <Input
-                    value={authForm.name}
-                    onChange={(e) => setAuthForm((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="Ján Novák"
-                  />
+                  <Input value={authForm.name} onChange={(e) => setAuthForm((p) => ({ ...p, name: e.target.value }))} placeholder="Ján Novák" />
                 </div>
               )}
 
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input
-                  value={authForm.email}
-                  onChange={(e) => setAuthForm((p) => ({ ...p, email: e.target.value }))}
-                  placeholder="meno@email.sk"
-                />
+                <Input value={authForm.email} onChange={(e) => setAuthForm((p) => ({ ...p, email: e.target.value }))} placeholder="meno@email.sk" />
               </div>
 
               <div className="space-y-2">
@@ -819,19 +787,13 @@ function MainTabs({
           settings={settings}
           monthStart={monthStart}
           monthEnd={monthEnd}
+          updateUser={updateUser}
         />
       </TabsContent>
 
       <TabsContent value="admin" className="mt-4">
         {isAdmin ? (
-          <AdminUI
-            profiles={profiles}
-            settings={settings}
-            pendingRequests={pendingRequests}
-            updateUser={updateUser}
-            updateSettings={updateSettings}
-            adminReviewRequest={adminReviewRequest}
-          />
+          <AdminUI profiles={profiles} settings={settings} pendingRequests={pendingRequests} updateUser={updateUser} updateSettings={updateSettings} adminReviewRequest={adminReviewRequest} />
         ) : (
           <Card>
             <CardContent className="p-4 text-sm text-zinc-600">Nemáš admin oprávnenie.</CardContent>
@@ -863,7 +825,6 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
     return round2(base * ratio);
   }, [profile.base_salary, presentDays, workdaysInMonth]);
 
-  // Zálohy – zatiaľ berieme z profilu (ak stĺpec neexistuje, bude to 0)
   const advances = useMemo(() => Number(profile.advances || 0), [profile.advances]);
   const fmtEur = (n) => `${round2(Number(n) || 0)} €`;
 
@@ -881,7 +842,6 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
         <CardContent className="pt-2 space-y-3">
           <Row label="Zobrazené meno" value={displayName} />
-
           {isAdmin && profile.alias ? <Row label="Skutočné meno" value={profile.name} /> : null}
 
           <div className="flex items-center justify-between gap-2">
@@ -896,7 +856,6 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
           <Row label="Rola" value={profile.role} />
           <Row label="CloudTalk agent_id" value={profile.cloudtalk_agent_id ?? "—"} />
-
           {isAdmin ? <Row label="Základná mzda" value={`${Number(profile.base_salary || 0)} €`} /> : null}
 
           <div className="pt-3 border-t border-zinc-100 space-y-2">
@@ -1090,7 +1049,6 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
 
   const today = todayISO();
 
-  // user môže zapisovať iba dnešok
   useEffect(() => {
     if (!isAdmin && date !== today) setDate(today);
   }, [isAdmin, date, today]);
@@ -1119,12 +1077,7 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
   async function confirmMissing(userId, present, reason) {
     const dayISO = todayISO();
     try {
-      await onUpsertRecord(userId, dayISO, {
-        present: !!present,
-        minutes: 0,
-        successful_calls: 0,
-        accounts: 0,
-      });
+      await onUpsertRecord(userId, dayISO, { present: !!present, minutes: 0, successful_calls: 0, accounts: 0 });
       toast.success(`Dochádzka potvrdená (${present ? "prítomný" : "neprítomný"}). Dôvod: ${reason}`);
     } catch (e) {
       toast.error(String(e?.message || e));
@@ -1180,11 +1133,7 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
             </div>
             <div className="space-y-2">
               <Label>Úspešné hovory</Label>
-              <Input
-                inputMode="numeric"
-                value={form.successful_calls}
-                onChange={(e) => setForm((p) => ({ ...p, successful_calls: e.target.value }))}
-              />
+              <Input inputMode="numeric" value={form.successful_calls} onChange={(e) => setForm((p) => ({ ...p, successful_calls: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label>Založené účty</Label>
@@ -1317,11 +1266,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <select
-                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
+              <select className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="all">Všetky</option>
                 <option value="new">Nové</option>
                 <option value="in_progress">Rozpracované</option>
@@ -1459,9 +1404,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                       </Td>
                       {isAdmin && (
                         <Td className="text-sm text-zinc-600">
-                          {users.find((u) => u.id === c.assigned_to_user_id)?.alias ||
-                            users.find((u) => u.id === c.assigned_to_user_id)?.name ||
-                            "—"}
+                          {users.find((u) => u.id === c.assigned_to_user_id)?.alias || users.find((u) => u.id === c.assigned_to_user_id)?.name || "—"}
                         </Td>
                       )}
                       <Td className="text-right">
@@ -1486,7 +1429,7 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
   );
 }
 
-function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd }) {
+function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd, updateUser }) {
   const rules = settings?.salary_rules || {
     bonusEnabled: true,
     minutesThreshold: 1200,
@@ -1498,6 +1441,36 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   };
 
   const who = isAdmin ? profiles.filter((p) => p.active) : [profile];
+
+  // ===== NEW: Advances editor (admin only) =====
+  const [advUserId, setAdvUserId] = useState(() => (isAdmin ? (profiles.find((p) => p.active)?.id || profile.id) : profile.id));
+  const [advValue, setAdvValue] = useState("");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const first = profiles.find((p) => p.active)?.id;
+    if (first && !advUserId) setAdvUserId(first);
+  }, [isAdmin, profiles, advUserId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const u = profiles.find((p) => p.id === advUserId);
+    setAdvValue(String(Number(u?.advances || 0)));
+  }, [isAdmin, profiles, advUserId]);
+
+  async function saveAdvances() {
+    if (!isAdmin) return;
+    if (!advUserId) return toast.error("Vyber používateľa.");
+    const val = Number(advValue);
+    if (Number.isNaN(val)) return toast.error("Zadaj číslo.");
+    try {
+      await updateUser(advUserId, { advances: val });
+      toast.success("Zálohy uložené.");
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+  // ============================================
 
   const summaries = useMemo(() => {
     return who.map((u) => {
@@ -1526,6 +1499,48 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
 
   return (
     <div className="space-y-4">
+      {isAdmin ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Zálohy (admin)</CardTitle>
+            <div className="text-sm text-zinc-600">Zadáš sumu vyplatených záloh pre používateľa. Zobrazí sa v „Môj profil: Zálohy“.</div>
+          </CardHeader>
+          <CardContent className="pt-2 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Používateľ</Label>
+                <select
+                  className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                  value={advUserId || ""}
+                  onChange={(e) => setAdvUserId(e.target.value)}
+                >
+                  {profiles
+                    .filter((p) => p.active)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.alias || u.name} ({u.email})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Vyplatené zálohy (€)</Label>
+                <Input inputMode="numeric" value={advValue} onChange={(e) => setAdvValue(e.target.value)} placeholder="napr. 50" />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={saveAdvances}>Uložiť zálohy</Button>
+              <Button variant="outline" onClick={() => setAdvValue("0")}>
+                Vynulovať
+              </Button>
+            </div>
+
+            <div className="text-xs text-zinc-500">Pozn.: používa sa stĺpec <span className="font-mono">profiles.advances</span> (number).</div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat icon={Calculator} label="Výplaty spolu" value={`${totals.sumTotal} €`} />
         <Stat icon={Calculator} label="Bonusy spolu" value={`${totals.sumBonus} €`} />
@@ -1596,6 +1611,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
   }
 
   const pending = pendingRequests || [];
+  const cloudtalkConf = cloudtalk;
 
   return (
     <div className="space-y-4">
@@ -1626,7 +1642,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                 ) : (
                   pending.map((r) => {
                     const u = profiles.find((p) => p.id === r.user_id);
-                    const who = u ? (u.alias || u.name) : r.user_id;
+                    const who = u ? u.alias || u.name : r.user_id;
                     const val =
                       r.kind === "alias"
                         ? safeStr(r.payload?.alias)
@@ -1696,22 +1712,13 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                     <Td className="font-medium">{u.alias || u.name}</Td>
                     <Td className="text-zinc-600">{u.email}</Td>
                     <Td>
-                      <select
-                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
-                        value={u.role}
-                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
-                      >
+                      <select className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm" value={u.role} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
                     </Td>
                     <Td className="text-right">
-                      <Input
-                        className="w-[110px] ml-auto"
-                        inputMode="numeric"
-                        value={u.base_salary}
-                        onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
-                      />
+                      <Input className="w-[110px] ml-auto" inputMode="numeric" value={u.base_salary} onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })} />
                     </Td>
                     <Td className="text-right">
                       <Input
@@ -1775,15 +1782,11 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                 <div className="text-xs text-zinc-600">Aktivuje „Volaj“.</div>
               </div>
             </div>
-            <Switch checked={!!cloudtalk.enabled} onCheckedChange={(v) => updateSettings({ cloudtalk: { ...cloudtalk, enabled: v } })} />
+            <Switch checked={!!cloudtalkConf.enabled} onCheckedChange={(v) => updateSettings({ cloudtalk: { ...cloudtalkConf, enabled: v } })} />
           </div>
           <div className="space-y-2">
             <Label>Backend URL</Label>
-            <Input
-              value={cloudtalk.backendUrl || ""}
-              onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalk, backendUrl: e.target.value } })}
-              placeholder="https://tvoj-backend.example"
-            />
+            <Input value={cloudtalkConf.backendUrl || ""} onChange={(e) => updateSettings({ cloudtalk: { ...cloudtalkConf, backendUrl: e.target.value } })} placeholder="https://tvoj-backend.example" />
           </div>
         </CardContent>
       </Card>

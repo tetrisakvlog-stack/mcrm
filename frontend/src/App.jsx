@@ -888,14 +888,15 @@ function MainTabs({
 
       <TabsContent value="admin" className="mt-4">
         {isAdmin ? (
-          <AdminUI
-            profiles={profiles}
-            settings={settings}
-            pendingRequests={pendingRequests}
-            updateUser={updateUser}
-            updateSettings={updateSettings}
-            adminReviewRequest={adminReviewRequest}
-          />
+         <AdminUI
+          profile={profile}
+          profiles={profiles}
+          settings={settings}
+          pendingRequests={pendingRequests}
+          updateUser={updateUser}
+          updateSettings={updateSettings}
+          adminReviewRequest={adminReviewRequest}
+         />
         ) : (
           <Card>
             <CardContent className="p-4 text-sm text-zinc-600">Nemáš admin oprávnenie.</CardContent>
@@ -1189,6 +1190,62 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
 
   return (
     <div className="space-y-4">
+       {/* Pending approvals */}
+  <Card>
+    <CardHeader>
+      <CardTitle>Čakajú na schválenie</CardTitle>
+      <div className="text-sm text-zinc-600">
+        Noví používatelia sa do systému nedostanú, kým ich Root/Admin neschváli.
+      </div>
+    </CardHeader>
+    <CardContent className="pt-2">
+      {(() => {
+        const pendingApprovals = (profiles || []).filter((u) => u.approved === false);
+
+        if (pendingApprovals.length === 0) {
+          return <div className="text-sm text-zinc-600">Nikto nečaká na schválenie.</div>;
+        }
+
+        const isRoot = profile?.rank === "root" || profile?.is_root === true || profile?.role === "admin";
+
+        return (
+          <div className="overflow-auto rounded-xl border border-zinc-200">
+            <Table>
+              <THead>
+                <Tr>
+                  <Th>Meno/Alias</Th>
+                  <Th>Email</Th>
+                  <Th className="text-right">Akcia</Th>
+                </Tr>
+              </THead>
+              <TBody>
+                {pendingApprovals.map((u) => (
+                  <Tr key={u.id}>
+                    <Td className="font-medium">{u.alias || u.name}</Td>
+                    <Td className="text-zinc-600">{u.email}</Td>
+                    <Td className="text-right">
+                      <Button
+                        onClick={() => updateUser(u.id, { approved: true })}
+                        disabled={!isRoot}
+                      >
+                        Schváliť
+                      </Button>
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </Table>
+
+            {!isRoot ? (
+              <div className="p-3 text-xs text-zinc-600">
+                Schvaľovať môže iba Root/Admin.
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+    </CardContent>
+  </Card>
       {isAdmin ? <AdminMissingAttendancePanel profiles={profiles} records={records} onConfirm={confirmMissing} /> : null}
 
       <Card>
@@ -2126,7 +2183,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
   );
 }
 
-function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettings, adminReviewRequest }) {
+function AdminUI({ profile, profiles, settings, pendingRequests, updateUser, updateSettings, adminReviewRequest }) {
   const cloudtalk = settings?.cloudtalk || { enabled: false, backendUrl: "" };
 
   const [sipOpen, setSipOpen] = useState(false);

@@ -52,6 +52,8 @@ import {
   listContacts,
   upsertContact,
   deleteContact,
+  listContactCalls,
+  createContactCall,
   getSettings,
   updateSettings,
   // alias/avatar requests
@@ -60,22 +62,12 @@ import {
   listPendingProfileChangeRequests,
   reviewProfileChangeRequest,
   uploadAvatarFile,
-
-  // contact calls (ak ich používaš v Contacts upgrade)
-  // listContactCalls,
-  // createContactCall,
-  // updateContactAfterCall,
 } from "./lib/db.js";
 
 /** =========================
  *  Remember login toggle key
  *  ========================= */
 const REMEMBER_KEY = "mcrm_remember_login";
-
-/** =========================
- *  UI State persistence keys
- *  ========================= */
-const UI_KEY = "mcrm_ui_state_v1";
 
 /** =========================
  *  Helpers
@@ -134,29 +126,6 @@ function round2(n) {
 }
 function safeStr(v) {
   return (v ?? "").toString();
-}
-
-/** =========================
- *  LocalStorage helpers (safe)
- *  ========================= */
-function loadUIState() {
-  try {
-    const raw = localStorage.getItem(UI_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-function saveUIState(patch) {
-  try {
-    const cur = loadUIState();
-    const next = { ...cur, ...patch };
-    localStorage.setItem(UI_KEY, JSON.stringify(next));
-  } catch {
-    // ignore
-  }
 }
 
 /** =========================
@@ -308,11 +277,10 @@ export default function App() {
         setProfile(my);
         setSettings(await getSettings());
 
-        // requests
         try {
           const mine = await listMyProfileChangeRequests(u.id);
           if (!cancelled) setMyRequests(mine);
-        } catch {
+        } catch (e) {
           // ignore
         }
       } catch (e) {
@@ -760,9 +728,6 @@ function DashboardOverview({ profile, records, monthStart, monthEnd }) {
   );
 }
 
-/** =========================
- *  Main Tabs (persisted)
- *  ========================= */
 function MainTabs({
   profile,
   displayName,
@@ -787,13 +752,7 @@ function MainTabs({
   updateUser,
   updateSettings,
 }) {
-  const ui = useMemo(() => loadUIState(), []);
-  const initialTab = ui?.mainTab && ["my", "records", "contacts", "salary", "admin"].includes(ui.mainTab) ? ui.mainTab : "my";
-  const [tab, setTab] = useState(initialTab);
-
-  useEffect(() => {
-    saveUIState({ mainTab: tab });
-  }, [tab]);
+  const [tab, setTab] = useState("my");
 
   return (
     <Tabs value={tab} onValueChange={setTab}>
@@ -899,9 +858,8 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
     return round2(base * ratio);
   }, [profile.base_salary, presentDays, workdaysInMonth]);
 
-  // ak máš advances v profiles (zálohy), ukáž
   const advances = Number(profile.advances || 0);
-  const payAfterAdv = useMemo(() => round2(currentPay - advances), [currentPay, advances]);
+  const payAfterAdvances = useMemo(() => round2(currentPay - advances), [currentPay, advances]);
 
   const pendingMine = useMemo(() => (myRequests || []).filter((r) => r.status === "pending"), [myRequests]);
 
@@ -917,6 +875,7 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
         <CardContent className="pt-2 space-y-3">
           <Row label="Zobrazené meno" value={displayName} />
+
           {isAdmin && profile.alias ? <Row label="Skutočné meno" value={profile.name} /> : null}
 
           <div className="flex items-center justify-between gap-2">
@@ -931,14 +890,17 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
 
           <Row label="Rola" value={profile.role} />
           <Row label="CloudTalk agent_id" value={profile.cloudtalk_agent_id ?? "—"} />
+
           {isAdmin ? <Row label="Základná mzda" value={`${Number(profile.base_salary || 0)} €`} /> : null}
 
           <div className="pt-3 border-t border-zinc-100 space-y-2">
             <Row label="Odchodené dni / pracovné dni" value={`${presentDays} / ${workdaysInMonth}`} />
             <Row label="Aktuálna výplata podľa dochádzky" value={`${currentPay} €`} />
-            <Row label="Zálohy" value={`${advances ? `-${advances}` : 0} €`} />
-            <Row label="Výplata po zálohách" value={`${payAfterAdv} €`} />
-            <div className="text-xs text-zinc-600">Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.</div>
+            <Row label="Zálohy" value={`${advances} €`} />
+            <Row label="Výplata po zálohách" value={`${payAfterAdvances} €`} />
+            <div className="text-xs text-zinc-600">
+              Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.
+            </div>
           </div>
 
           <div className="pt-3 border-t border-zinc-100 space-y-3">
@@ -1099,16 +1061,9 @@ function AdminMissingAttendancePanel({ profiles, records, onConfirm }) {
   );
 }
 
-/** =========================
- *  RecordsUI (persisted)
- *  ========================= */
 function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, onUpsertRecord, onDeleteRecord }) {
-  const ui = useMemo(() => loadUIState(), []);
-  const initialSelectedUserId = isAdmin ? ui.recordsSelectedUserId || profile.id : profile.id;
-  const initialDate = isAdmin ? ui.recordsDate || todayISO() : todayISO();
-
-  const [selectedUserId, setSelectedUserId] = useState(initialSelectedUserId);
-  const [date, setDate] = useState(initialDate);
+  const [selectedUserId, setSelectedUserId] = useState(profile.id);
+  const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState({ present: false, minutes: 0, successful_calls: 0, accounts: 0 });
 
   const today = todayISO();
@@ -1116,18 +1071,6 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
   useEffect(() => {
     if (!isAdmin && date !== today) setDate(today);
   }, [isAdmin, date, today]);
-
-  useEffect(() => {
-    if (!isAdmin) setSelectedUserId(profile.id);
-  }, [isAdmin, profile.id]);
-
-  useEffect(() => {
-    if (isAdmin) saveUIState({ recordsSelectedUserId: selectedUserId });
-  }, [isAdmin, selectedUserId]);
-
-  useEffect(() => {
-    if (isAdmin) saveUIState({ recordsDate: date });
-  }, [isAdmin, date]);
 
   const options = isAdmin ? profiles.filter((p) => p.active) : [profile];
   const rows = useMemo(() => records.filter((r) => r.user_id === selectedUserId), [records, selectedUserId]);
@@ -1145,6 +1088,10 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
       setForm({ present: false, minutes: 0, successful_calls: 0, accounts: 0 });
     }
   }, [existing?.id]);
+
+  useEffect(() => {
+    if (!isAdmin) setSelectedUserId(profile.id);
+  }, [isAdmin, profile.id]);
 
   async function confirmMissing(userId, present, reason) {
     const dayISO = todayISO();
@@ -1289,86 +1236,102 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
 }
 
 /** =========================
- *  ContactsUI (persisted basic state)
- *  - This keeps current UI you showed; if you have the upgraded Contacts already,
- *    this persistence still works (tabs/filters/selection).
+ *  CONTACTS (upgraded)
  *  ========================= */
-function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onDeleteContact, initiateCall }) {
-  const ui = useMemo(() => loadUIState(), []);
+function toLocalDateTimeInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
 
-  const [q, setQ] = useState(ui.contactsQ || "");
-  const [status, setStatus] = useState(ui.contactsStatus || "all");
+function fromLocalDateTimeInput(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function labelStatus(s) {
+  const v = (s || "new").toLowerCase();
+  if (v === "won") return "Získaný";
+  if (v === "lost") return "Nezáujem";
+  if (v === "called") return "Aktívny";
+  if (v === "in_progress") return "Rozpracované";
+  return "Nové";
+}
+
+function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onDeleteContact, initiateCall }) {
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("all");
+
+  const [userFilter, setUserFilter] = useState(isAdmin ? "all" : profile.id);
+  const [showUninterested, setShowUninterested] = useState(false);
+
+  const [view, setView] = useState("list"); // list | calendar
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // "Používateľ" filter: admin môže prepnúť medzi users, user má iba svoje.
-  // Ukladáme do localStorage len pre admin, aby sa mu to obnovilo.
-  const [assignedUser, setAssignedUser] = useState(isAdmin ? ui.contactsUserId || "all" : profile.id);
+  const empty = {
+    id: "",
+    name: "",
+    phone: "",
+    email: "",
+    company: "",
+    status: "new",
+    assigned_to_user_id: profile.id,
+    notes: "",
+    client_potential: "mid",
+    employment_status: "",
+    sales_experience: "",
+    next_call_at: null,
+  };
+  const [form, setForm] = useState(empty);
 
-  // Toggle: zobrazenie nezáujmu
-  const [showLost, setShowLost] = useState(ui.contactsShowLost ? true : false);
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = useMemo(() => (contacts || []).find((c) => c.id === selectedId) || null, [contacts, selectedId]);
 
-  // list/calendar subtab (ak to v tvojom kontakte upgrade existuje)
-  const [subtab, setSubtab] = useState(ui.contactsSubtab || "list"); // "list" | "calendar"
-
-  // vybraný kontakt
-  const [selectedId, setSelectedId] = useState(ui.contactsSelectedId || "");
-
-  useEffect(() => saveUIState({ contactsQ: q }), [q]);
-  useEffect(() => saveUIState({ contactsStatus: status }), [status]);
-  useEffect(() => saveUIState({ contactsShowLost: showLost ? 1 : 0 }), [showLost]);
-  useEffect(() => saveUIState({ contactsSubtab: subtab }), [subtab]);
-
-  useEffect(() => {
-    if (isAdmin) saveUIState({ contactsUserId: assignedUser });
-  }, [isAdmin, assignedUser]);
-
-  useEffect(() => {
-    if (selectedId) saveUIState({ contactsSelectedId: selectedId });
-  }, [selectedId]);
-
-  const users = isAdmin ? profiles.filter((p) => p.active) : [profile];
-
-  // fallback: ak selectedId už neexistuje, vyčisti
-  useEffect(() => {
-    if (!selectedId) return;
-    if (!contacts.some((c) => c.id === selectedId)) setSelectedId("");
-  }, [contacts, selectedId]);
+  const users = useMemo(() => (isAdmin ? (profiles || []).filter((p) => p.active) : [profile]), [isAdmin, profiles, profile]);
 
   const visible = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
-    return contacts
+    return (contacts || [])
       .filter((c) => {
-        // assigned user filter
-        const okAssigned = isAdmin ? (assignedUser === "all" ? true : c.assigned_to_user_id === assignedUser) : c.assigned_to_user_id === profile.id;
+        if (isAdmin && userFilter !== "all" && (c.assigned_to_user_id || "") !== userFilter) return false;
 
-        // status filter
-        const s = c.status || "new";
-        const okStatus = status === "all" ? true : s === status;
+        const cst = (c.status || "new").toLowerCase();
+        if (status !== "all" && cst !== status) return false;
 
-        // show/hide lost
-        const okLost = showLost ? true : s !== "lost";
+        if (!showUninterested && status !== "lost" && cst === "lost") return false;
 
-        // search
         const hay = `${c.name || ""} ${c.company || ""} ${c.phone || ""} ${c.email || ""}`.toLowerCase();
-        const okQ = !qq ? true : hay.includes(qq);
+        if (qq && !hay.includes(qq)) return false;
 
-        return okAssigned && okStatus && okLost && okQ;
+        return true;
       })
       .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-  }, [contacts, q, status, showLost, isAdmin, assignedUser, profile.id]);
+  }, [contacts, q, status, isAdmin, userFilter, showUninterested]);
 
-  const empty = { id: "", name: "", phone: "", email: "", company: "", status: "new", assigned_to_user_id: profile.id, notes: "" };
-  const [form, setForm] = useState(empty);
+  useEffect(() => {
+    if (!visible.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !visible.some((c) => c.id === selectedId)) {
+      setSelectedId(visible[0].id);
+    }
+  }, [visible, selectedId]);
 
   function openNew() {
-    const assignTo = isAdmin
-      ? assignedUser === "all"
-        ? users[0]?.id || profile.id
-        : assignedUser
-      : profile.id;
-
-    setForm({ ...empty, assigned_to_user_id: assignTo });
+    setForm({
+      ...empty,
+      assigned_to_user_id: isAdmin ? users[0]?.id || profile.id : profile.id,
+    });
     setDialogOpen(true);
   }
   function openEdit(c) {
@@ -1378,263 +1341,630 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
       phone: c.phone || "",
       email: c.email || "",
       company: c.company || "",
-      status: c.status || "new",
+      status: (c.status || "new").toLowerCase(),
       assigned_to_user_id: c.assigned_to_user_id || profile.id,
       notes: c.notes || "",
+      client_potential: c.client_potential || "mid",
+      employment_status: c.employment_status || "",
+      sales_experience: c.sales_experience || "",
+      next_call_at: c.next_call_at || null,
     });
     setDialogOpen(true);
   }
 
-  const selected = useMemo(() => (selectedId ? contacts.find((c) => c.id === selectedId) || null : null), [contacts, selectedId]);
+  const [calls, setCalls] = useState([]);
+  const [callForm, setCallForm] = useState({
+    outcome: "connected",
+    attitude: "",
+    employment_status: "",
+    sales_experience: "",
+    client_potential: "mid",
+    next_call_at: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!selected?.id) {
+        setCalls([]);
+        return;
+      }
+      try {
+        const rows = await listContactCalls(selected.id);
+        if (!cancelled) setCalls(rows);
+
+        if (!cancelled) {
+          setCallForm((p) => ({
+            ...p,
+            employment_status: selected.employment_status || "",
+            sales_experience: selected.sales_experience || "",
+            client_potential: selected.client_potential || "mid",
+            next_call_at: toLocalDateTimeInput(selected.next_call_at || null),
+          }));
+        }
+      } catch (e) {
+        toast.error(String(e?.message || e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id]);
+
+  async function setContactStatus(nextStatus) {
+    if (!selected) return;
+    const patch = { ...selected, status: nextStatus };
+    if (nextStatus === "lost") patch.next_call_at = null;
+
+    try {
+      await onUpsertContact(patch);
+      toast.success("Uložené.");
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+
+  async function savePostojAndLog() {
+    if (!selected?.id) return;
+
+    const statusNow = (selected.status || "new").toLowerCase();
+    const isLost = statusNow === "lost";
+
+    const nextCallISO = isLost ? null : fromLocalDateTimeInput(callForm.next_call_at);
+
+    try {
+      await createContactCall({
+        contactId: selected.id,
+        userId: profile.id,
+        outcome: callForm.outcome,
+        attitude: callForm.attitude,
+        notes: callForm.notes,
+      });
+
+      await onUpsertContact({
+        ...selected,
+        last_outcome: callForm.outcome || null,
+        last_attitude: callForm.attitude || null,
+        last_notes: callForm.notes || null,
+        employment_status: callForm.employment_status || null,
+        sales_experience: callForm.sales_experience || null,
+        client_potential: callForm.client_potential || null,
+        next_call_at: nextCallISO,
+      });
+
+      toast.success("Uložené + log pridaný.");
+
+      const rows = await listContactCalls(selected.id);
+      setCalls(rows);
+
+      setCallForm((p) => ({ ...p, notes: "" }));
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+
+  const calendarItems = useMemo(() => {
+    const items = (contacts || [])
+      .filter((c) => !!c.next_call_at && (c.status || "new").toLowerCase() !== "lost")
+      .filter((c) => (!isAdmin || userFilter === "all" ? true : (c.assigned_to_user_id || "") === userFilter))
+      .sort((a, b) => new Date(a.next_call_at).getTime() - new Date(b.next_call_at).getTime());
+
+    const groups = new Map();
+    for (const c of items) {
+      const d = new Date(c.next_call_at);
+      const key = d.toISOString().slice(0, 10);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+    return Array.from(groups.entries()).map(([day, list]) => ({ day, list }));
+  }, [contacts, isAdmin, userFilter]);
+
+  useEffect(() => {
+    const KEY = `mcrm_notified_${profile.id}`;
+    const readNotified = () => {
+      try {
+        return JSON.parse(localStorage.getItem(KEY) || "{}");
+      } catch {
+        return {};
+      }
+    };
+    const writeNotified = (obj) => {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(obj));
+      } catch {}
+    };
+
+    const tick = () => {
+      if (!("Notification" in window)) return;
+      if (Notification.permission !== "granted") return;
+
+      const now = Date.now();
+      const horizonMs = 10 * 60 * 1000; // 10 min
+      const notified = readNotified();
+
+      const relevant = (contacts || [])
+        .filter((c) => !!c.next_call_at && (c.status || "new").toLowerCase() !== "lost")
+        .filter((c) => (!isAdmin || userFilter === "all" ? true : (c.assigned_to_user_id || "") === userFilter));
+
+      for (const c of relevant) {
+        const t = new Date(c.next_call_at).getTime();
+        if (!Number.isFinite(t)) continue;
+
+        const delta = t - now;
+        if (delta <= 0 || delta > horizonMs) continue;
+
+        const stamp = `${c.id}_${c.next_call_at}`;
+        if (notified[stamp]) continue;
+
+        notified[stamp] = true;
+
+        const title = "Dohoda: je čas volať";
+        const body = `${c.name || "(bez mena)"} • ${c.phone || ""} • ${toLocalDateTimeInput(c.next_call_at).replace("T", " ")}`;
+        try {
+          new Notification(title, { body });
+        } catch {}
+      }
+
+      writeNotified(notified);
+    };
+
+    const id = setInterval(tick, 30 * 1000);
+    return () => clearInterval(id);
+  }, [contacts, profile.id, isAdmin, userFilter]);
+
+  async function enableNotifications() {
+    if (!("Notification" in window)) return toast.error("Prehliadač nepodporuje notifikácie.");
+    try {
+      const res = await Notification.requestPermission();
+      if (res === "granted") toast.success("Upozornenia zapnuté.");
+      else toast.error("Upozornenia neboli povolené.");
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex items-center justify-between">
-            <CardTitle>Kontakty</CardTitle>
-            {/* subtab buttons (list/calendar) */}
-            <div className="flex items-center gap-2">
-              <Button variant={subtab === "list" ? "primary" : "outline"} onClick={() => setSubtab("list")}>
-                Zoznam
-              </Button>
-              <Button variant={subtab === "calendar" ? "primary" : "outline"} onClick={() => setSubtab("calendar")}>
-                Kalendár
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <CardTitle>Kontakty</CardTitle>
+          <div className="flex gap-2">
+            <Button variant={view === "list" ? "primary" : "outline"} onClick={() => setView("list")}>
+              Zoznam
+            </Button>
+            <Button variant={view === "calendar" ? "primary" : "outline"} onClick={() => setView("calendar")}>
+              Kalendár
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-2 space-y-4">
+          <div className="space-y-2">
+            <Label>Vyhľadávanie</Label>
+            <div className="flex gap-2">
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="meno, firma, číslo…" />
+              <Button variant="outline">
+                <Search className="h-4 w-4" />
               </Button>
             </div>
-          </CardHeader>
+          </div>
 
-          <CardContent className="pt-2 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label>Vyhľadávanie</Label>
-              <div className="flex gap-2">
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="meno, firma, číslo…" />
-                <Button variant="outline">
-                  <Search className="h-4 w-4" />
-                </Button>
-              </div>
+              <Label>Status</Label>
+              <select
+                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="all">Všetky</option>
+                <option value="new">Nové</option>
+                <option value="in_progress">Rozpracované</option>
+                <option value="called">Aktívny</option>
+                <option value="won">Získaný</option>
+                <option value="lost">Nezáujem</option>
+              </select>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Status</Label>
+            <div className="space-y-2">
+              <Label>Používateľ</Label>
+              <div className="flex gap-2">
                 <select
                   className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  value={isAdmin ? userFilter : profile.id}
+                  onChange={(e) => setUserFilter(e.target.value)}
+                  disabled={!isAdmin}
                 >
-                  <option value="all">Všetky</option>
-                  <option value="new">Nové</option>
-                  <option value="in_progress">Rozpracované</option>
-                  <option value="called">Aktívne</option>
-                  <option value="won">Získané</option>
-                  <option value="lost">Nezáujem</option>
+                  {isAdmin && <option value="all">Všetky</option>}
+                  {(users || []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.alias || u.name} ({u.email})
+                    </option>
+                  ))}
                 </select>
+                {isAdmin ? (
+                  <Button variant="outline" onClick={() => setUserFilter(profile.id)}>
+                    Moje
+                  </Button>
+                ) : null}
+              </div>
+              {!isAdmin ? <div className="text-xs text-zinc-500">User vidí iba svoje.</div> : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Zobrazenie nezáujmu</Label>
+              <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between">
+                <div className="text-sm text-zinc-700">{showUninterested ? "Zap." : "Vyp."}</div>
+                <Switch checked={showUninterested} onCheckedChange={(v) => setShowUninterested(!!v)} />
+              </div>
+            </div>
+          </div>
+
+          <Button onClick={openNew}>
+            <Plus className="h-4 w-4" /> Pridať kontakt
+          </Button>
+
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title={form.id ? "Upraviť kontakt" : "Nový kontakt"} trigger={null}>
+            <div className="grid gap-3">
+              <div className="grid gap-2">
+                <Label>Meno</Label>
+                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               </div>
 
-              <div className="space-y-2">
-                <Label>Používateľ</Label>
-                <div className="flex gap-2">
+              <div className="grid gap-2">
+                <Label>Telefón (E.164)</Label>
+                <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+421901234567" />
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label>Email</Label>
+                  <Input value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Firma</Label>
+                  <Input value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label>Potenciál klienta</Label>
                   <select
                     className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                    value={isAdmin ? assignedUser : profile.id}
-                    onChange={(e) => setAssignedUser(e.target.value)}
+                    value={form.client_potential || "mid"}
+                    onChange={(e) => setForm((p) => ({ ...p, client_potential: e.target.value }))}
+                  >
+                    <option value="high">Vysoký</option>
+                    <option value="mid">Stredný</option>
+                    <option value="low">Nízky</option>
+                    <option value="very_low">Veľmi nízky</option>
+                  </select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Status</Label>
+                  <select
+                    className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                    value={form.status}
+                    onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
+                  >
+                    <option value="new">Nové</option>
+                    <option value="in_progress">Rozpracované</option>
+                    <option value="called">Aktívny</option>
+                    <option value="won">Získaný</option>
+                    <option value="lost">Nezáujem</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label>Priradiť</Label>
+                  <select
+                    className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                    value={form.assigned_to_user_id}
+                    onChange={(e) => setForm((p) => ({ ...p, assigned_to_user_id: e.target.value }))}
                     disabled={!isAdmin}
                   >
-                    {isAdmin && <option value="all">Všetky</option>}
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.alias || u.name}
                       </option>
                     ))}
                   </select>
-                  {isAdmin ? (
-                    <Button variant="outline" onClick={() => setAssignedUser(profile.id)}>
-                      Moje
-                    </Button>
-                  ) : null}
                 </div>
-                <div className="text-xs text-zinc-500">{isAdmin ? "Admin vidí všetky / podľa používateľa." : "User vidí iba svoje."}</div>
-              </div>
 
-              <div className="space-y-2">
-                <Label>Zobrazenie nezáujmu</Label>
-                <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between">
-                  <div className="text-sm">{showLost ? "Zap." : "Vyp."}</div>
-                  <Switch checked={showLost} onCheckedChange={(v) => setShowLost(!!v)} />
-                </div>
-              </div>
-            </div>
-
-            <Button onClick={openNew}>
-              <Plus className="h-4 w-4" /> Pridať kontakt
-            </Button>
-
-            {/* List / Calendar placeholder */}
-            {subtab === "calendar" ? (
-              <div className="rounded-xl border border-zinc-200 p-4 text-sm text-zinc-600">
-                Kalendár dohôd je v tvojej “Contacts upgrade” verzii. Tento App.jsx si pamätá, že si bol v “Kalendár”.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {visible.length === 0 ? (
-                  <div className="text-sm text-zinc-600">Žiadne kontakty.</div>
-                ) : (
-                  visible.map((c) => (
-                    <button
-                      key={c.id}
-                      className={`w-full text-left rounded-2xl border p-3 hover:bg-zinc-50 ${
-                        selectedId === c.id ? "border-zinc-900" : "border-zinc-200"
-                      }`}
-                      onClick={() => setSelectedId(c.id)}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="font-medium">{c.name || "(bez mena)"}</div>
-                        <div className="text-xs text-zinc-500">{(c.updated_at || "").slice(0, 10)}</div>
-                      </div>
-                      <div className="text-xs text-zinc-600">
-                        {(c.company || "—")} • {(c.phone || "—")}
-                      </div>
-                      <div className="mt-2">
-                        <Badge>{c.status || "new"}</Badge>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title={form.id ? "Upraviť kontakt" : "Nový kontakt"} trigger={null}>
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label>Meno</Label>
-                  <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Telefón (E.164)</Label>
-                  <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+421901234567" />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="grid gap-2">
-                    <Label>Email</Label>
-                    <Input value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Firma</Label>
-                    <Input value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="grid gap-2">
-                    <Label>Status</Label>
-                    <select
-                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                      value={form.status}
-                      onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
-                    >
-                      <option value="new">Nové</option>
-                      <option value="in_progress">Rozpracované</option>
-                      <option value="called">Aktívne</option>
-                      <option value="won">Získané</option>
-                      <option value="lost">Nezáujem</option>
-                    </select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Priradiť</Label>
-                    <select
-                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                      value={form.assigned_to_user_id}
-                      onChange={(e) => setForm((p) => ({ ...p, assigned_to_user_id: e.target.value }))}
-                      disabled={!isAdmin}
-                    >
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.alias || u.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
                 <div className="grid gap-2">
                   <Label>Poznámky</Label>
-                  <textarea
-                    className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-                    value={form.notes}
-                    onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-                  />
+                  <Input value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
                 </div>
-                <div className="flex gap-2">
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    onUpsertContact({ ...form });
+                    setDialogOpen(false);
+                  }}
+                >
+                  Uložiť
+                </Button>
+
+                {form.id ? (
                   <Button
+                    variant="outline"
                     onClick={() => {
-                      onUpsertContact({ ...form });
+                      onDeleteContact(form.id);
                       setDialogOpen(false);
                     }}
                   >
-                    Uložiť
+                    Zmazať
                   </Button>
-                  {form.id && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        onDeleteContact(form.id);
-                        setDialogOpen(false);
-                      }}
-                    >
-                      Zmazať
-                    </Button>
-                  )}
-                </div>
+                ) : null}
               </div>
-            </Dialog>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex items-center justify-between">
-            <CardTitle>Detail kontaktu</CardTitle>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => (selected ? initiateCall(selected) : null)} disabled={!selected?.phone}>
-                <Phone className="h-4 w-4" /> Volaj
-              </Button>
-              {selected ? (
-                <Button variant="outline" onClick={() => openEdit(selected)}>
-                  Upraviť
-                </Button>
-              ) : null}
             </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {!selected ? (
-              <div className="text-sm text-zinc-600">Vyber kontakt zo zoznamu.</div>
-            ) : (
-              <div className="space-y-2">
-                <div className="text-lg font-semibold">{selected.name || "(bez mena)"}</div>
-                <div className="text-sm text-zinc-600">{selected.company || "—"} • {selected.email || "—"}</div>
-                <div className="text-sm font-mono">{selected.phone || "—"}</div>
-                <div className="pt-2">
-                  <Badge>{selected.status || "new"}</Badge>
-                </div>
-                <div className="pt-3 text-sm text-zinc-700 whitespace-pre-wrap">{selected.notes || ""}</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </Dialog>
 
-      <div className="mt-3">
-        <Button variant="outline" onClick={() => saveUIState({ contactsSelectedId: selectedId || "" })}>
-          Uložiť stav (debug)
-        </Button>
-      </div>
+          {view === "calendar" ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-zinc-700 font-medium">Dohody</div>
+                <Button variant="outline" onClick={enableNotifications}>
+                  Zapnúť upozornenia
+                </Button>
+              </div>
+
+              {calendarItems.length === 0 ? (
+                <div className="text-sm text-zinc-600">Žiadne dohodnuté hovory.</div>
+              ) : (
+                <div className="space-y-3">
+                  {calendarItems.map((g) => (
+                    <div key={g.day} className="rounded-xl border border-zinc-200 p-3">
+                      <div className="text-sm font-semibold">{g.day}</div>
+                      <div className="mt-2 space-y-2">
+                        {g.list.map((c) => (
+                          <div key={c.id} className="flex items-center justify-between gap-2">
+                            <button className="text-left hover:underline min-w-0" onClick={() => setSelectedId(c.id)}>
+                              <div className="font-medium truncate">{c.name || "(bez mena)"}</div>
+                              <div className="text-xs text-zinc-600 truncate">
+                                {toLocalDateTimeInput(c.next_call_at).replace("T", " ")} • {c.phone || "—"}
+                              </div>
+                            </button>
+                            <Button onClick={() => initiateCall(c)} disabled={!c.phone}>
+                              <Phone className="h-4 w-4" /> Volaj
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {visible.length === 0 ? (
+                <div className="text-sm text-zinc-600">Žiadne kontakty.</div>
+              ) : (
+                visible.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelectedId(c.id)}
+                    className={`w-full text-left rounded-2xl border p-3 hover:bg-zinc-50 ${
+                      c.id === selectedId ? "border-zinc-400" : "border-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold truncate">{c.name || "(bez mena)"}</div>
+                      <div className="text-xs text-zinc-600">{labelStatus(c.status)}</div>
+                    </div>
+                    <div className="text-xs text-zinc-600 truncate">
+                      {(c.company || "—")} • {(c.phone || "—")}
+                    </div>
+                    {c.next_call_at && (c.status || "new").toLowerCase() !== "lost" ? (
+                      <div className="mt-1 text-xs text-zinc-700">
+                        Dohoda: <span className="font-medium">{toLocalDateTimeInput(c.next_call_at).replace("T", " ")}</span>
+                      </div>
+                    ) : null}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Detail kontaktu</CardTitle>
+        </CardHeader>
+
+        <CardContent className="pt-2 space-y-4">
+          {!selected ? (
+            <div className="text-sm text-zinc-600">Vyber kontakt.</div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold truncate">{selected.name || "(bez mena)"}</div>
+                  <div className="text-sm text-zinc-600 truncate">
+                    {(selected.company || "—")} • {(selected.email || "—")}
+                  </div>
+                  <div className="text-sm font-mono">{selected.phone || "—"}</div>
+                  <div className="mt-2 inline-flex">
+                    <Badge>{labelStatus(selected.status)}</Badge>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={() => initiateCall(selected)} disabled={!selected.phone}>
+                    <Phone className="h-4 w-4" /> Volaj
+                  </Button>
+                  <Button variant="outline" onClick={() => openEdit(selected)}>
+                    Upraviť
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Button variant="outline" onClick={() => setContactStatus("called")}>
+                  Označiť: Aktívny
+                </Button>
+                <Button variant="outline" onClick={() => setContactStatus("won")}>
+                  Označiť: Získaný
+                </Button>
+                <Button variant="outline" onClick={() => setContactStatus("lost")}>
+                  Označiť: Nemá záujem
+                </Button>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 p-4 space-y-3">
+                <div className="text-sm font-semibold">Stav hovoru / Postoj / Dohoda</div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Stav hovoru</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={callForm.outcome}
+                      onChange={(e) => setCallForm((p) => ({ ...p, outcome: e.target.value }))}
+                    >
+                      <option value="connected">Pripojené</option>
+                      <option value="no_answer">Nezdvihol</option>
+                      <option value="busy">Obsadené</option>
+                      <option value="rejected">Zrušené</option>
+                      <option value="other">Iné</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Postoj kontaktu</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={callForm.attitude}
+                      onChange={(e) => setCallForm((p) => ({ ...p, attitude: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      <option value="call_later_no_time">Zavolať neskôr (nemá čas)</option>
+                      <option value="already_customer">Už klient (nemá záujem)</option>
+                      <option value="no_interest">Nemá záujem</option>
+                      <option value="interrupted">Prerušené (vyťažené)</option>
+                      <option value="blacklist">Žiadosť o čiernu listinu</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Zamestnanecký status</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={callForm.employment_status}
+                      onChange={(e) => setCallForm((p) => ({ ...p, employment_status: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      <option value="employed">Zamestnaný</option>
+                      <option value="student">Študent</option>
+                      <option value="business">Podnikateľ</option>
+                      <option value="unemployed">Nezamestnaný</option>
+                      <option value="other">Iné</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Skúsenosti s obchodovaním</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={callForm.sales_experience}
+                      onChange={(e) => setCallForm((p) => ({ ...p, sales_experience: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      <option value="yes">Áno</option>
+                      <option value="no">Nie</option>
+                      <option value="unknown">Nie je dostupné</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Potenciál klienta</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={callForm.client_potential}
+                      onChange={(e) => setCallForm((p) => ({ ...p, client_potential: e.target.value }))}
+                    >
+                      <option value="high">Vysoký</option>
+                      <option value="mid">Stredný</option>
+                      <option value="low">Nízky</option>
+                      <option value="very_low">Veľmi nízky</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Dohoda (dátum a čas ďalšieho hovoru)</Label>
+                    <Input
+                      type="datetime-local"
+                      value={callForm.next_call_at}
+                      onChange={(e) => setCallForm((p) => ({ ...p, next_call_at: e.target.value }))}
+                      disabled={(selected.status || "new").toLowerCase() === "lost"}
+                    />
+                    {(selected.status || "new").toLowerCase() === "lost" ? (
+                      <div className="text-xs text-zinc-500">Kontakt je „Nemá záujem“ — dohoda sa nenastavuje.</div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Poznámky k hovoru</Label>
+                    <textarea
+                      className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+                      value={callForm.notes}
+                      onChange={(e) => setCallForm((p) => ({ ...p, notes: e.target.value }))}
+                      placeholder="čo povedal, čo dohodnuté, kedy zavolať..."
+                    />
+                  </div>
+                </div>
+
+                <Button onClick={savePostojAndLog} className="w-fit">
+                  Uložiť postoj + log
+                </Button>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">História hovorov</div>
+                  <div className="text-xs text-zinc-600">{calls.length} záznamov</div>
+                </div>
+
+                {calls.length === 0 ? (
+                  <div className="mt-2 text-sm text-zinc-600">Zatiaľ bez záznamov.</div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {calls.slice(0, 20).map((r) => (
+                      <div key={r.id} className="rounded-xl border border-zinc-200 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            {r.outcome ? <Badge>{r.outcome}</Badge> : null}
+                            {r.attitude ? <Badge>{r.attitude}</Badge> : null}
+                          </div>
+                          <div className="text-xs text-zinc-600">{new Date(r.created_at).toLocaleString()}</div>
+                        </div>
+                        {r.notes ? <div className="mt-2 text-sm text-zinc-700 whitespace-pre-wrap">{r.notes}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-/** =========================
- *  SalaryUI (no changes except it exists)
- *  - if you have an admin advances panel, you can persist selected user there similarly:
- *    useEffect(() => saveUIState({ salaryAdvUserId: userId }), [userId])
- *  ========================= */
 function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd }) {
   const rules = settings?.salary_rules || {
     bonusEnabled: true,
@@ -1775,7 +2105,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                 ) : (
                   pending.map((r) => {
                     const u = profiles.find((p) => p.id === r.user_id);
-                    const who = u ? (u.alias || u.name) : r.user_id;
+                    const who = u ? u.alias || u.name : r.user_id;
                     const val =
                       r.kind === "alias"
                         ? safeStr(r.payload?.alias)

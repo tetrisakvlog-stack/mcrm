@@ -1,7 +1,3 @@
-// App.jsx (celý súbor)
-// OPRAVA: vrátený admin panel "Zálohy (admin)" do záložky Výplaty + ponechané "Výplata po zálohách" v Môj profil
-// Pozn.: používa profiles.advances (number). DB stĺpec musí existovať.
-
 import React, { useEffect, useMemo, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
 import {
@@ -20,8 +16,10 @@ import {
   X,
   Image as ImageIcon,
   Pencil,
-  TrendingUp,
-  TrendingDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  Save,
+  Trash2,
 } from "lucide-react";
 import {
   Badge,
@@ -58,6 +56,10 @@ import {
   listContacts,
   upsertContact,
   deleteContact,
+  // NEW (contact call log)
+  listContactCalls,
+  createContactCall,
+  updateContactAfterCall,
   getSettings,
   updateSettings,
   // alias/avatar requests
@@ -130,6 +132,13 @@ function round2(n) {
 }
 function safeStr(v) {
   return (v ?? "").toString();
+}
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function euro(n) {
+  return `${round2(n)} €`;
 }
 
 /** =========================
@@ -462,6 +471,7 @@ export default function App() {
         body: JSON.stringify({ agent_id: profile.cloudtalk_agent_id, callee_number: phone }),
       });
       if (!res.ok) throw new Error(await res.text());
+
       await upsertContact({ ...contact, status: "called", last_call_at: new Date().toISOString() });
       toast.success("Volanie spustené.");
       await refreshData();
@@ -578,6 +588,7 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
             <Avatar url={profile.avatar_url || null} name={displayName} size={40} />
+
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="font-semibold truncate">{displayName}</div>
@@ -630,12 +641,13 @@ export default function App() {
           records={records}
           contacts={contacts}
           settings={settings}
-          refreshData={() => refreshData()}
+          refreshData={refreshData}
           myRequests={myRequests}
           pendingRequests={pendingRequests}
           requestAliasChange={requestAliasChange}
           requestAvatarChange={requestAvatarChange}
           adminReviewRequest={adminReviewRequest}
+          initiateCall={initiateCall}
           onUpsertRecord={async (userId, date, patch) => {
             try {
               await upsertRecord({ userId, date, ...patch });
@@ -672,7 +684,6 @@ export default function App() {
               toast.error(String(e?.message || e));
             }
           }}
-          initiateCall={initiateCall}
           updateUser={async (id, patch) => {
             try {
               await updateProfile(id, patch);
@@ -862,10 +873,17 @@ function MyProfile({
     return round2(base * ratio);
   }, [profile.base_salary, presentDays, workdaysInMonth]);
 
-  const advances = useMemo(() => Number(profile.advances || 0), [profile.advances]);
-  const netPay = useMemo(() => round2(currentPay - advances), [currentPay, advances]);
+  const advances = useMemo(() => num(profile.advances || 0), [profile.advances]);
+  const payAfterAdv = useMemo(() => round2(currentPay - advances), [currentPay, advances]);
 
   const pendingMine = useMemo(() => (myRequests || []).filter((r) => r.status === "pending"), [myRequests]);
+
+  const PayValue = ({ amount, positive }) => (
+    <span className={`inline-flex items-center gap-1 font-semibold ${positive ? "text-emerald-600" : "text-rose-600"}`}>
+      {positive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+      {euro(amount)}
+    </span>
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -902,31 +920,17 @@ function MyProfile({
 
             <Row
               label="Aktuálna výplata podľa dochádzky"
-              value={
-                <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
-                  <TrendingUp className="h-4 w-4" />
-                  {currentPay} €
-                </span>
-              }
+              value={<PayValue amount={currentPay} positive={true} />}
             />
 
             <Row
               label="Zálohy"
-              value={
-                <span className="inline-flex items-center gap-1 text-rose-600 font-semibold">
-                  <TrendingDown className="h-4 w-4" />-{round2(advances)} €
-                </span>
-              }
+              value={<PayValue amount={advances} positive={false} />}
             />
 
             <Row
               label="Výplata po zálohách"
-              value={
-                <span className={`inline-flex items-center gap-1 font-semibold ${netPay >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                  {netPay >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {netPay} €
-                </span>
-              }
+              value={<span className="font-semibold">{euro(payAfterAdv)}</span>}
             />
 
             <div className="text-xs text-zinc-600">
@@ -1003,9 +1007,9 @@ function MyProfile({
 
 function Row({ label, value }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-3">
       <div className="text-sm text-zinc-600">{label}</div>
-      <div className="text-sm font-medium">{value}</div>
+      <div className="text-sm font-medium text-right">{value}</div>
     </div>
   );
 }
@@ -1268,32 +1272,117 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
   );
 }
 
+/** =========================
+ *  CONTACTS (UPGRADED)
+ *  - list + filters
+ *  - right-side detail + call form
+ *  - call log
+ * ========================= */
 function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onDeleteContact, initiateCall }) {
+  // left list filters
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const [pool, setPool] = useState("all"); // "all" | "my"
+  const [onlyActive, setOnlyActive] = useState(true);
+
+  // dialog (create/edit basic info)
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const users = isAdmin ? profiles.filter((p) => p.active) : [profile];
 
+  const empty = {
+    id: "",
+    name: "",
+    phone: "",
+    email: "",
+    company: "",
+    status: "new",
+    assigned_to_user_id: profile.id,
+    notes: "",
+    // NEW contact fields
+    employment_status: "unknown",
+    trading_experience: "unknown",
+    potential: "unknown",
+    disposition: "none",
+    last_outcome: "none",
+  };
+
+  const [form, setForm] = useState(empty);
+
+  // selected contact + call history
+  const [selectedId, setSelectedId] = useState("");
+  const selected = useMemo(() => contacts.find((c) => c.id === selectedId) || null, [contacts, selectedId]);
+
+  const [callLog, setCallLog] = useState([]);
+  const [callLoading, setCallLoading] = useState(false);
+
+  const [callForm, setCallForm] = useState({
+    channel: "phone",
+    result: "connected", // connected | no_answer | busy | wrong_number | not_interested
+    disposition: "none", // none | canvas_closed | no_time | personal | not_interested | interrupted | blacklist
+    employment_status: "unknown", // employed | self_employed | student | unemployed | not_available | unknown
+    trading_experience: "unknown", // yes | no | not_available | unknown
+    potential: "unknown", // high | mid | low | very_low | unknown
+    notes: "",
+  });
+
+  // keep selection valid
+  useEffect(() => {
+    if (selectedId && !contacts.some((c) => c.id === selectedId)) setSelectedId("");
+  }, [contacts, selectedId]);
+
+  // load call log when contact selected
+  useEffect(() => {
+    if (!selectedId) {
+      setCallLog([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setCallLoading(true);
+        const rows = await listContactCalls({ contactId: selectedId });
+        if (!cancelled) setCallLog(rows);
+      } catch (e) {
+        toast.error(String(e?.message || e));
+      } finally {
+        if (!cancelled) setCallLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
   const visible = useMemo(() => {
     const qq = q.trim().toLowerCase();
-    return contacts
+
+    const base = contacts
       .filter((c) => {
+        const myOk =
+          pool === "all"
+            ? true
+            : (c.assigned_to_user_id || "") === profile.id;
+
+        const okActive = onlyActive ? (c.status || "new") !== "lost" : true;
+
         const okStatus = status === "all" ? true : (c.status || "new") === status;
+
         const hay = `${c.name || ""} ${c.company || ""} ${c.phone || ""} ${c.email || ""}`.toLowerCase();
         const okQ = !qq ? true : hay.includes(qq);
-        return okStatus && okQ;
+
+        return myOk && okActive && okStatus && okQ;
       })
       .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-  }, [contacts, q, status]);
 
-  const empty = { id: "", name: "", phone: "", email: "", company: "", status: "new", assigned_to_user_id: profile.id, notes: "" };
-  const [form, setForm] = useState(empty);
+    return base;
+  }, [contacts, q, status, pool, onlyActive, profile.id]);
 
   function openNew() {
     setForm({ ...empty, assigned_to_user_id: isAdmin ? users[0]?.id || profile.id : profile.id });
     setDialogOpen(true);
   }
+
   function openEdit(c) {
     setForm({
       id: c.id,
@@ -1304,76 +1393,111 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
       status: c.status || "new",
       assigned_to_user_id: c.assigned_to_user_id || profile.id,
       notes: c.notes || "",
+      employment_status: c.employment_status || "unknown",
+      trading_experience: c.trading_experience || "unknown",
+      potential: c.potential || "unknown",
+      disposition: c.disposition || "none",
+      last_outcome: c.last_outcome || "none",
     });
     setDialogOpen(true);
   }
 
+  async function selectContact(c) {
+    setSelectedId(c.id);
+  }
+
+  async function saveCallAndUpdateContact() {
+    if (!selected?.id) return toast.error("Vyber kontakt.");
+    if (!profile?.id) return toast.error("Chýba user.");
+
+    try {
+      // 1) log call
+      await createContactCall({
+        contact_id: selected.id,
+        user_id: profile.id,
+        channel: callForm.channel,
+        result: callForm.result,
+        disposition: callForm.disposition,
+        employment_status: callForm.employment_status,
+        trading_experience: callForm.trading_experience,
+        potential: callForm.potential,
+        notes: callForm.notes || null,
+      });
+
+      // 2) update contact snapshot fields
+      const patch = {
+        status: selected.status || "new",
+        last_call_at: new Date().toISOString(),
+        last_outcome: callForm.result,
+        disposition: callForm.disposition,
+        employment_status: callForm.employment_status,
+        trading_experience: callForm.trading_experience,
+        potential: callForm.potential,
+        updated_at: new Date().toISOString(),
+      };
+
+      // if user set final disposition, set status automatically
+      if (callForm.disposition === "blacklist") patch.status = "lost";
+      if (callForm.result === "connected" && callForm.disposition !== "blacklist") patch.status = "in_progress";
+      if (callForm.result === "not_interested") patch.status = "lost";
+
+      await updateContactAfterCall({ contactId: selected.id, patch });
+
+      toast.success("Uložené (hovor + kontakt).");
+
+      // refresh local UI
+      const rows = await listContactCalls({ contactId: selected.id });
+      setCallLog(rows);
+
+      // reset call notes only
+      setCallForm((p) => ({ ...p, notes: "" }));
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+
+  async function quickSetStatus(nextStatus) {
+    if (!selected?.id) return;
+    try {
+      await updateContactAfterCall({
+        contactId: selected.id,
+        patch: { status: nextStatus, updated_at: new Date().toISOString() },
+      });
+      toast.success("Status uložený.");
+    } catch (e) {
+      toast.error(String(e?.message || e));
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Kontakty na volanie</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-2 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Vyhľadávanie</Label>
-              <div className="flex gap-2">
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="meno, firma, číslo…" />
-                <Button variant="outline">
-                  <Search className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <select
-                className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="all">Všetky</option>
-                <option value="new">Nové</option>
-                <option value="in_progress">Rozpracované</option>
-                <option value="called">Zavolané</option>
-                <option value="won">Predaj</option>
-                <option value="lost">Neúspech</option>
-              </select>
-            </div>
-          </div>
-
-          <Button onClick={openNew}>
-            <Plus className="h-4 w-4" /> Pridať kontakt
-          </Button>
-
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title={form.id ? "Upraviť kontakt" : "Nový kontakt"} trigger={null}>
+    <div className="grid gap-4 lg:grid-cols-12">
+      {/* LEFT: list */}
+      <div className="lg:col-span-5 space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Kontakty</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-2 space-y-4">
             <div className="grid gap-3">
-              <div className="grid gap-2">
-                <Label>Meno</Label>
-                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Telefón (E.164)</Label>
-                <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+421901234567" />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label>Email</Label>
-                  <Input value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Firma</Label>
-                  <Input value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
+              <div className="space-y-2">
+                <Label>Vyhľadávanie</Label>
+                <div className="flex gap-2">
+                  <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="meno, firma, číslo…" />
+                  <Button variant="outline">
+                    <Search className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-2">
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-2">
                   <Label>Status</Label>
                   <select
                     className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                    value={form.status}
-                    onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
                   >
+                    <option value="all">Všetky</option>
                     <option value="new">Nové</option>
                     <option value="in_progress">Rozpracované</option>
                     <option value="called">Zavolané</option>
@@ -1381,124 +1505,399 @@ function ContactsUI({ isAdmin, profile, profiles, contacts, onUpsertContact, onD
                     <option value="lost">Neúspech</option>
                   </select>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Priradiť</Label>
+
+                <div className="space-y-2">
+                  <Label>Pool</Label>
                   <select
                     className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-                    value={form.assigned_to_user_id}
-                    onChange={(e) => setForm((p) => ({ ...p, assigned_to_user_id: e.target.value }))}
+                    value={pool}
+                    onChange={(e) => setPool(e.target.value)}
                     disabled={!isAdmin}
                   >
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.alias || u.name}
-                      </option>
-                    ))}
+                    <option value="all">Všetky</option>
+                    <option value="my">Moje</option>
                   </select>
+                  {!isAdmin ? <div className="text-[11px] text-zinc-500">User vidí iba svoje.</div> : null}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Aktívne</Label>
+                  <div className="h-10 rounded-xl border border-zinc-300 px-3 flex items-center justify-between">
+                    <div className="text-sm">Skryť lost</div>
+                    <Switch checked={onlyActive} onCheckedChange={(v) => setOnlyActive(!!v)} />
+                  </div>
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Poznámky</Label>
-                <textarea
-                  className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-                  value={form.notes}
-                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    onUpsertContact({ ...form });
-                    setDialogOpen(false);
-                  }}
-                >
-                  Uložiť
-                </Button>
-                {form.id && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      onDeleteContact(form.id);
-                      setDialogOpen(false);
-                    }}
-                  >
-                    Zmazať
-                  </Button>
+
+              <Button onClick={openNew}>
+                <Plus className="h-4 w-4" /> Pridať kontakt
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 overflow-hidden">
+              <div className="max-h-[520px] overflow-auto">
+                {visible.length === 0 ? (
+                  <div className="p-4 text-sm text-zinc-600">Žiadne kontakty.</div>
+                ) : (
+                  <div className="divide-y divide-zinc-100">
+                    {visible.map((c) => (
+                      <button
+                        key={c.id}
+                        className={`w-full text-left p-3 hover:bg-zinc-50 ${
+                          selectedId === c.id ? "bg-zinc-50" : "bg-white"
+                        }`}
+                        onClick={() => selectContact(c)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{c.name || "(bez mena)"}</div>
+                            <div className="text-xs text-zinc-600 truncate">
+                              {(c.company || "—") + " • " + (c.phone || "—")}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Badge>{c.status || "new"}</Badge>
+                              {c.potential && c.potential !== "unknown" ? <Badge>{c.potential}</Badge> : null}
+                              {c.employment_status && c.employment_status !== "unknown" ? <Badge>{c.employment_status}</Badge> : null}
+                            </div>
+                          </div>
+                          <div className="text-xs text-zinc-500 shrink-0">
+                            {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : ""}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
-          </Dialog>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Zoznam</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-2">
-          <div className="overflow-auto rounded-xl border border-zinc-200">
-            <Table>
-              <THead>
-                <Tr>
-                  <Th>Meno</Th>
-                  <Th>Telefón</Th>
-                  <Th>Status</Th>
-                  {isAdmin && <Th>Priradené</Th>}
-                  <Th className="text-right">Akcie</Th>
-                </Tr>
-              </THead>
-              <TBody>
-                {visible.length === 0 ? (
-                  <Tr>
-                    <Td colSpan={isAdmin ? 5 : 4} className="text-zinc-600">
-                      Žiadne kontakty.
-                    </Td>
-                  </Tr>
-                ) : (
-                  visible.map((c) => (
-                    <Tr key={c.id}>
-                      <Td className="font-medium">
-                        <button className="text-left hover:underline" onClick={() => openEdit(c)}>
-                          {c.name || "(bez mena)"}
-                        </button>
-                        {c.company ? <div className="text-xs text-zinc-600">{c.company}</div> : null}
-                      </Td>
-                      <Td className="font-mono text-xs">{c.phone || "—"}</Td>
-                      <Td>
-                        <Badge>{c.status || "new"}</Badge>
-                      </Td>
-                      {isAdmin && (
-                        <Td className="text-sm text-zinc-600">
-                          {users.find((u) => u.id === c.assigned_to_user_id)?.alias ||
-                            users.find((u) => u.id === c.assigned_to_user_id)?.name ||
-                            "—"}
-                        </Td>
-                      )}
-                      <Td className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button onClick={() => initiateCall(c)} disabled={!c.phone}>
-                            <Phone className="h-4 w-4" /> Volaj
-                          </Button>
-                          <Button variant="outline" onClick={() => openEdit(c)}>
-                            Upraviť
-                          </Button>
-                        </div>
-                      </Td>
-                    </Tr>
-                  ))
-                )}
-              </TBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+            {/* dialog new/edit */}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title={form.id ? "Upraviť kontakt" : "Nový kontakt"} trigger={null}>
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label>Meno</Label>
+                  <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Telefón (E.164)</Label>
+                  <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+421901234567" />
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label>Email</Label>
+                    <Input value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Firma</Label>
+                    <Input value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label>Status</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={form.status}
+                      onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
+                    >
+                      <option value="new">Nové</option>
+                      <option value="in_progress">Rozpracované</option>
+                      <option value="called">Zavolané</option>
+                      <option value="won">Predaj</option>
+                      <option value="lost">Neúspech</option>
+                    </select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Priradiť</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={form.assigned_to_user_id}
+                      onChange={(e) => setForm((p) => ({ ...p, assigned_to_user_id: e.target.value }))}
+                      disabled={!isAdmin}
+                    >
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.alias || u.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2">
+                    <Label>Zamestnanie</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={form.employment_status}
+                      onChange={(e) => setForm((p) => ({ ...p, employment_status: e.target.value }))}
+                    >
+                      <option value="unknown">neznáme</option>
+                      <option value="employed">zamestnaný</option>
+                      <option value="self_employed">podnikateľ</option>
+                      <option value="student">študent</option>
+                      <option value="unemployed">nezamestnaný</option>
+                      <option value="not_available">nedostupné</option>
+                    </select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Skúsenosti</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={form.trading_experience}
+                      onChange={(e) => setForm((p) => ({ ...p, trading_experience: e.target.value }))}
+                    >
+                      <option value="unknown">neznáme</option>
+                      <option value="yes">áno</option>
+                      <option value="no">nie</option>
+                      <option value="not_available">nedostupné</option>
+                    </select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Potenciál</Label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                      value={form.potential}
+                      onChange={(e) => setForm((p) => ({ ...p, potential: e.target.value }))}
+                    >
+                      <option value="unknown">neznáme</option>
+                      <option value="high">vysoký</option>
+                      <option value="mid">stredný</option>
+                      <option value="low">nízky</option>
+                      <option value="very_low">veľmi nízky</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Poznámky</Label>
+                  <textarea
+                    className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+                    value={form.notes}
+                    onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      onUpsertContact({ ...form });
+                      setDialogOpen(false);
+                    }}
+                  >
+                    <Save className="h-4 w-4" /> Uložiť
+                  </Button>
+
+                  {form.id && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        onDeleteContact(form.id);
+                        setDialogOpen(false);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" /> Zmazať
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Dialog>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* RIGHT: detail */}
+      <div className="lg:col-span-7 space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Detail kontaktu</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {!selected ? (
+              <div className="text-sm text-zinc-600">Vyber kontakt zo zoznamu.</div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold truncate">{selected.name || "(bez mena)"}</div>
+                    <div className="text-sm text-zinc-600 truncate">
+                      {(selected.company || "—") + " • " + (selected.email || "—")}
+                    </div>
+                    <div className="text-sm font-mono mt-1">{selected.phone || "—"}</div>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge>{selected.status || "new"}</Badge>
+                      {selected.potential ? <Badge>{selected.potential}</Badge> : null}
+                      {selected.employment_status ? <Badge>{selected.employment_status}</Badge> : null}
+                      {selected.trading_experience ? <Badge>{selected.trading_experience}</Badge> : null}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={() => initiateCall(selected)} disabled={!selected.phone}>
+                      <Phone className="h-4 w-4" /> Volaj
+                    </Button>
+                    <Button variant="outline" onClick={() => openEdit(selected)}>
+                      Upraviť
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Button variant="outline" onClick={() => quickSetStatus("called")}>
+                    Označiť: called
+                  </Button>
+                  <Button variant="outline" onClick={() => quickSetStatus("won")}>
+                    Označiť: won
+                  </Button>
+                  <Button variant="outline" onClick={() => quickSetStatus("lost")}>
+                    Označiť: lost
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 p-3 space-y-3">
+                  <div className="font-medium">Stav hovoru / Postoj / Potenciál</div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Stav hovoru</Label>
+                      <select
+                        className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                        value={callForm.result}
+                        onChange={(e) => setCallForm((p) => ({ ...p, result: e.target.value }))}
+                      >
+                        <option value="connected">Pripojené</option>
+                        <option value="no_answer">Nezdvihol</option>
+                        <option value="busy">Obsadené</option>
+                        <option value="wrong_number">Zlé číslo</option>
+                        <option value="not_interested">Nezáujem</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Postoj kontaktu</Label>
+                      <select
+                        className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                        value={callForm.disposition}
+                        onChange={(e) => setCallForm((p) => ({ ...p, disposition: e.target.value }))}
+                      >
+                        <option value="none">—</option>
+                        <option value="canvas_closed">Canvas (uzavreté)</option>
+                        <option value="no_time">Zavolať neskôr (nemá čas)</option>
+                        <option value="personal">Osobne (nezáujem)</option>
+                        <option value="not_interested">Nezáujem</option>
+                        <option value="interrupted">Prerušené (vyťačené)</option>
+                        <option value="blacklist">Žiadosť o čiernu listinu</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Zamestnanecký status</Label>
+                      <select
+                        className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                        value={callForm.employment_status}
+                        onChange={(e) => setCallForm((p) => ({ ...p, employment_status: e.target.value }))}
+                      >
+                        <option value="unknown">Neznáme</option>
+                        <option value="employed">Zamestnaný</option>
+                        <option value="self_employed">Podnikateľ</option>
+                        <option value="student">Študent</option>
+                        <option value="unemployed">Nezamestnaný</option>
+                        <option value="not_available">Nie je dostupné</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Skúsenosti s obchodovaním</Label>
+                      <select
+                        className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                        value={callForm.trading_experience}
+                        onChange={(e) => setCallForm((p) => ({ ...p, trading_experience: e.target.value }))}
+                      >
+                        <option value="unknown">Neznáme</option>
+                        <option value="yes">Áno</option>
+                        <option value="no">Nie</option>
+                        <option value="not_available">Nie je dostupné</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Potenciál klienta</Label>
+                      <select
+                        className="w-full h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
+                        value={callForm.potential}
+                        onChange={(e) => setCallForm((p) => ({ ...p, potential: e.target.value }))}
+                      >
+                        <option value="unknown">Neznáme</option>
+                        <option value="high">Vysoký</option>
+                        <option value="mid">Stredný</option>
+                        <option value="low">Nízky</option>
+                        <option value="very_low">Veľmi nízky</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Poznámky k hovoru</Label>
+                    <textarea
+                      className="min-h-[90px] rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+                      value={callForm.notes}
+                      onChange={(e) => setCallForm((p) => ({ ...p, notes: e.target.value }))}
+                      placeholder="čo povedal, čo dohodnuté, kedy zavolať…"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={saveCallAndUpdateContact}>
+                      <Save className="h-4 w-4" /> Uložiť postoj + log
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-zinc-100 flex items-center justify-between">
+                    <div className="font-medium">História hovorov</div>
+                    <div className="text-xs text-zinc-500">{callLoading ? "Načítavam…" : `${callLog.length} záznamov`}</div>
+                  </div>
+
+                  <div className="max-h-[320px] overflow-auto">
+                    {callLog.length === 0 ? (
+                      <div className="p-3 text-sm text-zinc-600">Zatiaľ bez záznamov.</div>
+                    ) : (
+                      <div className="divide-y divide-zinc-100">
+                        {callLog.map((r) => (
+                          <div key={r.id} className="p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge>{r.result}</Badge>
+                              {r.disposition && r.disposition !== "none" ? <Badge>{r.disposition}</Badge> : null}
+                              {r.potential && r.potential !== "unknown" ? <Badge>{r.potential}</Badge> : null}
+                              <span className="text-xs text-zinc-500">{new Date(r.created_at).toLocaleString()}</span>
+                            </div>
+                            {r.notes ? <div className="mt-2 text-sm text-zinc-700 whitespace-pre-wrap">{r.notes}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
-/** =========================
- *  Salary + Advances (admin panel inside Salary tab)
- *  ========================= */
 function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, monthEnd, updateUser }) {
   const rules = settings?.salary_rules || {
     bonusEnabled: true,
@@ -1537,45 +1936,36 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
     [summaries]
   );
 
-  // --- Admin advances panel state ---
-  const activeUsers = useMemo(() => (profiles || []).filter((p) => !!p.active), [profiles]);
-  const [advUserId, setAdvUserId] = useState(profile?.id || "");
-  const selectedUser = useMemo(() => activeUsers.find((u) => u.id === advUserId) || null, [activeUsers, advUserId]);
+  // admin advances editor
+  const [advUserId, setAdvUserId] = useState(isAdmin ? (profiles.find((p) => p.active)?.id || profile.id) : profile.id);
+  const [advAmount, setAdvAmount] = useState("");
 
-  const [advValue, setAdvValue] = useState(() => {
-    const u = activeUsers.find((x) => x.id === (profile?.id || ""));
-    return u?.advances ?? 0;
-  });
+  useEffect(() => {
+    if (!isAdmin) setAdvUserId(profile.id);
+  }, [isAdmin, profile.id]);
 
   useEffect(() => {
     if (!isAdmin) return;
-    if (!advUserId && profile?.id) setAdvUserId(profile.id);
-  }, [isAdmin, advUserId, profile?.id]);
+    const u = profiles.find((p) => p.id === advUserId);
+    setAdvAmount(u ? String(num(u.advances || 0)) : "0");
+  }, [isAdmin, profiles, advUserId]);
 
-  useEffect(() => {
+  async function saveAdv() {
     if (!isAdmin) return;
-    if (!selectedUser) return;
-    setAdvValue(selectedUser.advances ?? 0);
-  }, [isAdmin, selectedUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function saveAdvances() {
-    if (!isAdmin) return;
-    if (!advUserId) return toast.error("Vyber používateľa.");
-    const v = Number(advValue) || 0;
+    const amount = num(advAmount);
     try {
-      await updateUser(advUserId, { advances: v });
+      await updateUser(advUserId, { advances: amount });
       toast.success("Zálohy uložené.");
     } catch (e) {
       toast.error(String(e?.message || e));
     }
   }
 
-  async function resetAdvances() {
+  async function resetAdv() {
     if (!isAdmin) return;
-    if (!advUserId) return toast.error("Vyber používateľa.");
     try {
       await updateUser(advUserId, { advances: 0 });
-      setAdvValue(0);
+      setAdvAmount("0");
       toast.success("Zálohy vynulované.");
     } catch (e) {
       toast.error(String(e?.message || e));
@@ -1588,9 +1978,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
         <Card>
           <CardHeader>
             <CardTitle>Zálohy (admin)</CardTitle>
-            <div className="text-sm text-zinc-600">
-              Zadáš sumu vyplatených záloh pre používateľa. Zobrazí sa v „Môj profil: Zálohy“.
-            </div>
+            <div className="text-sm text-zinc-600">Zadáš sumu vyplatených záloh pre používateľa. Zobrazí sa v „Môj profil: Zálohy“.</div>
           </CardHeader>
           <CardContent className="pt-2 space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1601,7 +1989,7 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
                   value={advUserId}
                   onChange={(e) => setAdvUserId(e.target.value)}
                 >
-                  {activeUsers.map((u) => (
+                  {profiles.filter((p) => p.active).map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.alias || u.name} ({u.email})
                     </option>
@@ -1611,20 +1999,18 @@ function SalaryUI({ isAdmin, profile, profiles, records, settings, monthStart, m
 
               <div className="space-y-2">
                 <Label>Vyplatené zálohy (€)</Label>
-                <Input inputMode="numeric" value={advValue} onChange={(e) => setAdvValue(e.target.value)} placeholder="0" />
+                <Input inputMode="numeric" value={advAmount} onChange={(e) => setAdvAmount(e.target.value)} placeholder="0" />
               </div>
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={saveAdvances}>Uložiť zálohy</Button>
-              <Button variant="outline" onClick={resetAdvances}>
+              <Button onClick={saveAdv}>Uložiť zálohy</Button>
+              <Button variant="outline" onClick={resetAdv}>
                 Vynulovať
               </Button>
             </div>
 
-            <div className="text-xs text-zinc-500">
-              Pozn.: používa sa stĺpec <span className="font-mono">profiles.advances</span> (number).
-            </div>
+            <div className="text-xs text-zinc-500">Pozn.: používa sa stĺpec profiles.advances (number).</div>
           </CardContent>
         </Card>
       ) : null}
@@ -1729,7 +2115,7 @@ function AdminUI({ profiles, settings, pendingRequests, updateUser, updateSettin
                 ) : (
                   pending.map((r) => {
                     const u = profiles.find((p) => p.id === r.user_id);
-                    const who = u ? u.alias || u.name : r.user_id;
+                    const who = u ? (u.alias || u.name) : r.user_id;
                     const val =
                       r.kind === "alias"
                         ? safeStr(r.payload?.alias)

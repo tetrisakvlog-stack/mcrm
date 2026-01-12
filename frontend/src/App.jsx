@@ -2350,69 +2350,115 @@ function AdminUI({ profile, profiles, settings, pendingRequests, updateUser, upd
     <Th className="text-right">Akcie</Th>
   </Tr>
 </THead>
-              <TBody>
-                {profiles.map((u) => (
-                  <Tr key={u.id}>
-                    <Td>
-                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} role={u.role} size={36} />
-                    </Td>
-                    <Td className="font-medium">{u.alias || u.name}</Td>
-                    <Td className="text-zinc-600">{u.email}</Td>
-                    <Td>
-                      <select
-                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
-                        value={u.role}
-                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
-                      >
-                        <option value="user">user</option>
-                        <option value="admin">admin</option>
-                      </select>
-                    </Td>
-                    <Td>
-                      <select
-                       className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
-                      value={u.rank || "rookie"}
-                      onChange={(e) => updateUser(u.id, { rank: e.target.value })}
-                      >
-                        <option value="rookie">Rookie</option>
-                        <option value="silver">Silver</option>
-                        <option value="gold">Gold</option>
-                        <option value="diamond">Diamond</option>
-                        <option value="manager">Manager</option>
-                        <option value="root">Root</option>
-                      </select>
-                    </Td>
-                    <Td className="text-right">
-                      <Input
-                        className="w-[110px] ml-auto"
-                        inputMode="numeric"
-                        value={u.base_salary}
-                        onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
-                      />
-                    </Td>
-                    <Td className="text-right">
-                      <Input
-                        className="w-[110px] ml-auto"
-                        inputMode="numeric"
-                        value={u.cloudtalk_agent_id ?? ""}
-                        onChange={(e) => updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })}
-                      />
-                    </Td>
-                    <Td className="text-right">
-                      <Button variant="outline" onClick={() => openSip(u)}>
-                        SIP
-                      </Button>
-                    </Td>
-                    <Td className="text-right">
-                      <div className="flex justify-end">
-                        <Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} />
-                      </div>
-                    </Td>
-                  </Tr>
-                ))}
-              </TBody>
-            </Table>
-          </div>
+<TBody>
+  {profiles.map((u) => (
+    <Tr key={u.id}>
+      <Td>
+        <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} role={u.role} size={36} />
+      </Td>
+
+      <Td className="font-medium">{u.alias || u.name}</Td>
+
+      <Td className="text-zinc-600">{u.email}</Td>
+
+      <Td>
+        <select
+          className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
+          value={u.rank || "rookie"}
+          onChange={(e) => updateUser(u.id, { rank: e.target.value })}
+        >
+          <option value="rookie">Rookie</option>
+          <option value="silver">Silver</option>
+          <option value="gold">Gold</option>
+          <option value="diamond">Diamond</option>
+          <option value="manager">Manager</option>
+          <option value="root">Root</option>
+        </select>
+      </Td>
+
+      <Td>
+        <select
+          className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
+          value={u.role}
+          onChange={(e) => updateUser(u.id, { role: e.target.value })}
+        >
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
+      </Td>
+
+      <Td className="text-right">
+        <Input
+          className="w-[110px] ml-auto"
+          inputMode="numeric"
+          value={u.base_salary ?? 0}
+          onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
+        />
+      </Td>
+
+      <Td className="text-right">
+        <Input
+          className="w-[110px] ml-auto"
+          inputMode="numeric"
+          value={u.advances ?? 0}
+          onChange={(e) => updateUser(u.id, { advances: Number(e.target.value) || 0 })}
+        />
+      </Td>
+
+      <Td className="text-right">
+        <Input
+          className="w-[110px] ml-auto"
+          inputMode="numeric"
+          value={u.cloudtalk_agent_id ?? ""}
+          onChange={(e) =>
+            updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
+          }
+        />
+      </Td>
+
+      <Td className="text-right">
+        <Button variant="outline" onClick={() => openSip(u)}>
+          SIP
+        </Button>
+      </Td>
+
+      <Td className="text-right">
+        <div className="flex justify-end">
+          <Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} />
+        </div>
+      </Td>
+
+      <Td className="text-right">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const nv = window.prompt("Nový alias:", u.alias || "");
+              if (nv === null) return;
+              const clean = nv.trim();
+              updateUser(u.id, { alias: clean === "" ? null : clean });
+            }}
+          >
+            Upraviť
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => {
+              const ok = window.confirm(`Naozaj chceš deaktivovať používateľa ${u.alias || u.name}?`);
+              if (!ok) return;
+              updateUser(u.id, { active: false });
+            }}
+          >
+            Zmazať
+          </Button>
+        </div>
+      </Td>
+    </Tr>
+  ))}
+</TBody>
+</Table>
+</div>
 
           <Dialog open={sipOpen} onOpenChange={setSipOpen} title={sipUser ? `SIP – ${sipUser.alias || sipUser.name}` : "SIP"} trigger={null}>
             <div className="grid gap-3">

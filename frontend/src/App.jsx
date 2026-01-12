@@ -272,7 +272,8 @@ export default function App() {
     }
   });
 
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = ["admin", "root"].includes(profile?.role);
+  const isRoot = profile?.role === "root";
   const displayName = useMemo(() => profile?.alias || profile?.name || "User", [profile?.alias, profile?.name]);
 
   const [periodISO, setPeriodISO] = useState(() => todayISO());

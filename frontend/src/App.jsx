@@ -133,14 +133,18 @@ function round2(n) {
 function safeStr(v) {
   return (v ?? "").toString();
 }
-function normalizeRank(r) {
+
+/** =========================
+ *  (OLD) Rank pill for profile (renamed to avoid duplicate)
+ *  ========================= */
+function normalizeRankPill(r) {
   const v = (r || "rookie").toLowerCase();
   if (["rookie", "silver", "gold", "diamond", "manager", "root"].includes(v)) return v;
   return "rookie";
 }
 
-function RankBadge({ rank }) {
-  const r = normalizeRank(rank);
+function RankPill({ rank }) {
+  const r = normalizeRankPill(rank);
   const base = "inline-flex items-center gap-1 rounded-xl border px-2 py-1 text-xs font-semibold";
 
   if (r === "root")
@@ -213,6 +217,9 @@ function BrandLockup({ className = "", size = 34, textClassName = "" }) {
   );
 }
 
+/** =========================
+ *  Rank badge for Avatar (kept as-is)
+ *  ========================= */
 function normalizeRank(rank, role) {
   const r = (rank || "").toString().trim().toLowerCase();
   if (role === "root") return "root";
@@ -281,6 +288,7 @@ function Avatar({ url, name, rank, role, size = 40 }) {
     </div>
   );
 }
+
 function Stat({ icon: Icon, label, value }) {
   return (
     <Card>
@@ -532,7 +540,6 @@ export default function App() {
     }
   }
 
-
   async function adminReviewRequest(requestId, approve, note) {
     if (!profile?.id) return;
     try {
@@ -595,32 +602,32 @@ export default function App() {
       </div>
     );
   }
-// BLOCK: user must be approved by Root/admin
-if (session?.user?.id && profile && profile.approved === false) {
-  return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-md mx-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle>Čaká na schválenie</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-zinc-700">
-            <div>Tvoj účet bol vytvorený, ale ešte nebol schválený Rootom.</div>
-            <div className="text-xs text-zinc-600">
-              Po schválení sa môžeš normálne prihlásiť a používať systém.
-            </div>
 
-            <Button className="w-full" variant="outline" onClick={logout}>
-              Odhlásiť
-            </Button>
-          </CardContent>
-        </Card>
+  // BLOCK: user must be approved by Root/admin
+  if (session?.user?.id && profile && profile.approved === false) {
+    return (
+      <div className="min-h-screen p-4 md:p-8">
+        <div className="max-w-md mx-auto">
+          <Card>
+            <CardHeader>
+              <CardTitle>Čaká na schválenie</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-zinc-700">
+              <div>Tvoj účet bol vytvorený, ale ešte nebol schválený Rootom.</div>
+              <div className="text-xs text-zinc-600">Po schválení sa môžeš normálne prihlásiť a používať systém.</div>
+
+              <Button className="w-full" variant="outline" onClick={logout}>
+                Odhlásiť
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Toaster position="top-right" />
       </div>
+    );
+  }
 
-      <Toaster position="top-right" />
-    </div>
-  );
-}
   if (!session?.user?.id || !profile) {
     return (
       <div className="min-h-screen p-4 md:p-8">
@@ -700,7 +707,13 @@ if (session?.user?.id && profile && profile.approved === false) {
       <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
-            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} role={profile.role} size={40} />
+            <Avatar
+              url={profile.avatar_url || null}
+              name={displayName}
+              rank={profile.rank}
+              role={profile.role}
+              size={40}
+            />
 
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -933,15 +946,15 @@ function MainTabs({
 
       <TabsContent value="admin" className="mt-4">
         {isAdmin ? (
-         <AdminUI
-          profile={profile}
-          profiles={profiles}
-          settings={settings}
-          pendingRequests={pendingRequests}
-          updateUser={updateUser}
-          updateSettings={updateSettings}
-          adminReviewRequest={adminReviewRequest}
-         />
+          <AdminUI
+            profile={profile}
+            profiles={profiles}
+            settings={settings}
+            pendingRequests={pendingRequests}
+            updateUser={updateUser}
+            updateSettings={updateSettings}
+            adminReviewRequest={adminReviewRequest}
+          />
         ) : (
           <Card>
             <CardContent className="p-4 text-sm text-zinc-600">Nemáš admin oprávnenie.</CardContent>
@@ -1004,10 +1017,12 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
           </div>
 
           <Row label="Rola" value={profile.role} />
+
           <div className="flex items-center justify-between">
-  <div className="text-sm text-zinc-600">Hodnosť</div>
-  <RankBadge rank={profile.rank} />
-</div>
+            <div className="text-sm text-zinc-600">Hodnosť</div>
+            <RankPill rank={profile.rank} />
+          </div>
+
           <Row label="CloudTalk agent_id" value={profile.cloudtalk_agent_id ?? "—"} />
 
           {isAdmin ? <Row label="Základná mzda" value={`${Number(profile.base_salary || 0)} €`} /> : null}
@@ -1015,35 +1030,34 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
           <div className="pt-3 border-t border-zinc-100 space-y-2">
             <Row label="Odchodené dni / pracovné dni" value={`${presentDays} / ${workdaysInMonth}`} />
             <div className="flex items-center justify-between">
-  <div className="text-sm text-zinc-600">Aktuálna výplata podľa dochádzky</div>
-  <div className="text-sm font-medium text-emerald-600 inline-flex items-center gap-1">
-    <TrendingUp className="h-4 w-4" />
-    {currentPay} €
-  </div>
-</div>
-
-<div className="flex items-center justify-between">
-  <div className="text-sm text-zinc-600">Zálohy</div>
-  <div className="text-sm font-medium text-rose-600 inline-flex items-center gap-1">
-    <TrendingDown className="h-4 w-4" />
-    {advances} €
-  </div>
-</div>
-
-<div className="flex items-center justify-between">
-  <div className="text-sm text-zinc-600">Výplata po zálohách</div>
-  <div
-    className={`text-sm font-medium inline-flex items-center gap-1 ${
-      payAfterAdvances >= 0 ? "text-emerald-600" : "text-rose-600"
-    }`}
-  >
-    {payAfterAdvances >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-    {payAfterAdvances} €
-  </div>
-</div>
-            <div className="text-xs text-zinc-600">
-              Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.
+              <div className="text-sm text-zinc-600">Aktuálna výplata podľa dochádzky</div>
+              <div className="text-sm font-medium text-emerald-600 inline-flex items-center gap-1">
+                <TrendingUp className="h-4 w-4" />
+                {currentPay} €
+              </div>
             </div>
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-zinc-600">Zálohy</div>
+              <div className="text-sm font-medium text-rose-600 inline-flex items-center gap-1">
+                <TrendingDown className="h-4 w-4" />
+                {advances} €
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-zinc-600">Výplata po zálohách</div>
+              <div
+                className={`text-sm font-medium inline-flex items-center gap-1 ${
+                  payAfterAdvances >= 0 ? "text-emerald-600" : "text-rose-600"
+                }`}
+              >
+                {payAfterAdvances >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                {payAfterAdvances} €
+              </div>
+            </div>
+
+            <div className="text-xs text-zinc-600">Počíta sa: základná mzda / pracovné dni v mesiaci × odchodené dni.</div>
           </div>
 
           <div className="pt-3 border-t border-zinc-100 space-y-3">
@@ -1235,62 +1249,54 @@ function RecordsUI({ isAdmin, profile, profiles, records, monthStart, monthEnd, 
 
   return (
     <div className="space-y-4">
-       {/* Pending approvals */}
-  <Card>
-    <CardHeader>
-      <CardTitle>Čakajú na schválenie</CardTitle>
-      <div className="text-sm text-zinc-600">
-        Noví používatelia sa do systému nedostanú, kým ich Root/Admin neschváli.
-      </div>
-    </CardHeader>
-    <CardContent className="pt-2">
-      {(() => {
-        const pendingApprovals = (profiles || []).filter((u) => u.approved === false);
+      {/* Pending approvals */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Čakajú na schválenie</CardTitle>
+          <div className="text-sm text-zinc-600">Noví používatelia sa do systému nedostanú, kým ich Root/Admin neschváli.</div>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {(() => {
+            const pendingApprovals = (profiles || []).filter((u) => u.approved === false);
 
-        if (pendingApprovals.length === 0) {
-          return <div className="text-sm text-zinc-600">Nikto nečaká na schválenie.</div>;
-        }
+            if (pendingApprovals.length === 0) {
+              return <div className="text-sm text-zinc-600">Nikto nečaká na schválenie.</div>;
+            }
 
-        const isRoot = profile?.rank === "root" || profile?.is_root === true || profile?.role === "admin";
+            const isRoot = profile?.rank === "root" || profile?.is_root === true || profile?.role === "admin";
 
-        return (
-          <div className="overflow-auto rounded-xl border border-zinc-200">
-            <Table>
-              <THead>
-                <Tr>
-                  <Th>Meno/Alias</Th>
-                  <Th>Email</Th>
-                  <Th className="text-right">Akcia</Th>
-                </Tr>
-              </THead>
-              <TBody>
-                {pendingApprovals.map((u) => (
-                  <Tr key={u.id}>
-                    <Td className="font-medium">{u.alias || u.name}</Td>
-                    <Td className="text-zinc-600">{u.email}</Td>
-                    <Td className="text-right">
-                      <Button
-                        onClick={() => updateUser(u.id, { approved: true })}
-                        disabled={!isRoot}
-                      >
-                        Schváliť
-                      </Button>
-                    </Td>
-                  </Tr>
-                ))}
-              </TBody>
-            </Table>
+            return (
+              <div className="overflow-auto rounded-xl border border-zinc-200">
+                <Table>
+                  <THead>
+                    <Tr>
+                      <Th>Meno/Alias</Th>
+                      <Th>Email</Th>
+                      <Th className="text-right">Akcia</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {pendingApprovals.map((u) => (
+                      <Tr key={u.id}>
+                        <Td className="font-medium">{u.alias || u.name}</Td>
+                        <Td className="text-zinc-600">{u.email}</Td>
+                        <Td className="text-right">
+                          <Button onClick={() => updateUser(u.id, { approved: true })} disabled={!isRoot}>
+                            Schváliť
+                          </Button>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </Table>
 
-            {!isRoot ? (
-              <div className="p-3 text-xs text-zinc-600">
-                Schvaľovať môže iba Root/Admin.
+                {!isRoot ? <div className="p-3 text-xs text-zinc-600">Schvaľovať môže iba Root/Admin.</div> : null}
               </div>
-            ) : null}
-          </div>
-        );
-      })()}
-    </CardContent>
-  </Card>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       {isAdmin ? <AdminMissingAttendancePanel profiles={profiles} records={records} onConfirm={confirmMissing} /> : null}
 
       <Card>
@@ -2335,130 +2341,130 @@ function AdminUI({ profile, profiles, settings, pendingRequests, updateUser, upd
         <CardContent className="pt-2">
           <div className="overflow-auto rounded-xl border border-zinc-200">
             <Table>
-<THead>
-  <Tr>
-    <Th>Avatar</Th>
-    <Th>Meno/Alias</Th>
-    <Th>Email</Th>
-    <Th>Hodnosť</Th>
-    <Th>Rola</Th>
-    <Th className="text-right">Základ (€)</Th>
-    <Th className="text-right">Zálohy (€)</Th>
-    <Th className="text-right">agent_id</Th>
-    <Th className="text-right">SIP</Th>
-    <Th className="text-right">Aktívny</Th>
-    <Th className="text-right">Akcie</Th>
-  </Tr>
-</THead>
-<TBody>
-  {profiles.map((u) => (
-    <Tr key={u.id}>
-      <Td>
-        <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} role={u.role} size={36} />
-      </Td>
+              <THead>
+                <Tr>
+                  <Th>Avatar</Th>
+                  <Th>Meno/Alias</Th>
+                  <Th>Email</Th>
+                  <Th>Hodnosť</Th>
+                  <Th>Rola</Th>
+                  <Th className="text-right">Základ (€)</Th>
+                  <Th className="text-right">Zálohy (€)</Th>
+                  <Th className="text-right">agent_id</Th>
+                  <Th className="text-right">SIP</Th>
+                  <Th className="text-right">Aktívny</Th>
+                  <Th className="text-right">Akcie</Th>
+                </Tr>
+              </THead>
+              <TBody>
+                {profiles.map((u) => (
+                  <Tr key={u.id}>
+                    <Td>
+                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} role={u.role} size={36} />
+                    </Td>
 
-      <Td className="font-medium">{u.alias || u.name}</Td>
+                    <Td className="font-medium">{u.alias || u.name}</Td>
 
-      <Td className="text-zinc-600">{u.email}</Td>
+                    <Td className="text-zinc-600">{u.email}</Td>
 
-      <Td>
-        <select
-          className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
-          value={u.rank || "rookie"}
-          onChange={(e) => updateUser(u.id, { rank: e.target.value })}
-        >
-          <option value="rookie">Rookie</option>
-          <option value="silver">Silver</option>
-          <option value="gold">Gold</option>
-          <option value="diamond">Diamond</option>
-          <option value="manager">Manager</option>
-          <option value="root">Root</option>
-        </select>
-      </Td>
+                    <Td>
+                      <select
+                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
+                        value={u.rank || "rookie"}
+                        onChange={(e) => updateUser(u.id, { rank: e.target.value })}
+                      >
+                        <option value="rookie">Rookie</option>
+                        <option value="silver">Silver</option>
+                        <option value="gold">Gold</option>
+                        <option value="diamond">Diamond</option>
+                        <option value="manager">Manager</option>
+                        <option value="root">Root</option>
+                      </select>
+                    </Td>
 
-      <Td>
-        <select
-          className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
-          value={u.role}
-          onChange={(e) => updateUser(u.id, { role: e.target.value })}
-        >
-          <option value="user">user</option>
-          <option value="admin">admin</option>
-        </select>
-      </Td>
+                    <Td>
+                      <select
+                        className="h-9 rounded-xl border border-zinc-300 bg-white px-2 text-sm"
+                        value={u.role}
+                        onChange={(e) => updateUser(u.id, { role: e.target.value })}
+                      >
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </Td>
 
-      <Td className="text-right">
-        <Input
-          className="w-[110px] ml-auto"
-          inputMode="numeric"
-          value={u.base_salary ?? 0}
-          onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
-        />
-      </Td>
+                    <Td className="text-right">
+                      <Input
+                        className="w-[110px] ml-auto"
+                        inputMode="numeric"
+                        value={u.base_salary ?? 0}
+                        onChange={(e) => updateUser(u.id, { base_salary: Number(e.target.value) || 0 })}
+                      />
+                    </Td>
 
-      <Td className="text-right">
-        <Input
-          className="w-[110px] ml-auto"
-          inputMode="numeric"
-          value={u.advances ?? 0}
-          onChange={(e) => updateUser(u.id, { advances: Number(e.target.value) || 0 })}
-        />
-      </Td>
+                    <Td className="text-right">
+                      <Input
+                        className="w-[110px] ml-auto"
+                        inputMode="numeric"
+                        value={u.advances ?? 0}
+                        onChange={(e) => updateUser(u.id, { advances: Number(e.target.value) || 0 })}
+                      />
+                    </Td>
 
-      <Td className="text-right">
-        <Input
-          className="w-[110px] ml-auto"
-          inputMode="numeric"
-          value={u.cloudtalk_agent_id ?? ""}
-          onChange={(e) =>
-            updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
-          }
-        />
-      </Td>
+                    <Td className="text-right">
+                      <Input
+                        className="w-[110px] ml-auto"
+                        inputMode="numeric"
+                        value={u.cloudtalk_agent_id ?? ""}
+                        onChange={(e) =>
+                          updateUser(u.id, { cloudtalk_agent_id: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                      />
+                    </Td>
 
-      <Td className="text-right">
-        <Button variant="outline" onClick={() => openSip(u)}>
-          SIP
-        </Button>
-      </Td>
+                    <Td className="text-right">
+                      <Button variant="outline" onClick={() => openSip(u)}>
+                        SIP
+                      </Button>
+                    </Td>
 
-      <Td className="text-right">
-        <div className="flex justify-end">
-          <Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} />
-        </div>
-      </Td>
+                    <Td className="text-right">
+                      <div className="flex justify-end">
+                        <Switch checked={!!u.active} onCheckedChange={(v) => updateUser(u.id, { active: v })} />
+                      </div>
+                    </Td>
 
-      <Td className="text-right">
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              const nv = window.prompt("Nový alias:", u.alias || "");
-              if (nv === null) return;
-              const clean = nv.trim();
-              updateUser(u.id, { alias: clean === "" ? null : clean });
-            }}
-          >
-            Upraviť
-          </Button>
+                    <Td className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            const nv = window.prompt("Nový alias:", u.alias || "");
+                            if (nv === null) return;
+                            const clean = nv.trim();
+                            updateUser(u.id, { alias: clean === "" ? null : clean });
+                          }}
+                        >
+                          Upraviť
+                        </Button>
 
-          <Button
-            variant="outline"
-            onClick={() => {
-              const ok = window.confirm(`Naozaj chceš deaktivovať používateľa ${u.alias || u.name}?`);
-              if (!ok) return;
-              updateUser(u.id, { active: false });
-            }}
-          >
-            Zmazať
-          </Button>
-        </div>
-      </Td>
-    </Tr>
-  ))}
-</TBody>
-</Table>
-</div>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            const ok = window.confirm(`Naozaj chceš deaktivovať používateľa ${u.alias || u.name}?`);
+                            if (!ok) return;
+                            updateUser(u.id, { active: false });
+                          }}
+                        >
+                          Zmazať
+                        </Button>
+                      </div>
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </Table>
+          </div>
 
           <Dialog open={sipOpen} onOpenChange={setSipOpen} title={sipUser ? `SIP – ${sipUser.alias || sipUser.name}` : "SIP"} trigger={null}>
             <div className="grid gap-3">
@@ -2494,12 +2500,13 @@ function AdminUI({ profile, profiles, settings, pendingRequests, updateUser, upd
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <div>
-                <div className="text-sm font-medium">Zapnúť CloudTalk</div>
+                 <div className="text-sm font-medium">Zapnúť CloudTalk</div>
                 <div className="text-xs text-zinc-600">Aktivuje „Volaj“.</div>
               </div>
             </div>
             <Switch checked={!!cloudtalk.enabled} onCheckedChange={(v) => updateSettings({ cloudtalk: { ...cloudtalk, enabled: v } })} />
           </div>
+
           <div className="space-y-2">
             <Label>Backend URL</Label>
             <Input

@@ -212,31 +212,74 @@ function BrandLockup({ className = "", size = 34, textClassName = "" }) {
   );
 }
 
-function Avatar({ url, name, rank, size = 40 }) {
-  const initials = (name || "U").trim().slice(0, 1).toUpperCase();
+function normalizeRank(rank, role) {
+  const r = (rank || "").toString().trim().toLowerCase();
+  if (role === "root") return "root";
+  if (r === "rookie") return "rookie";
+  if (r === "silver") return "silver";
+  if (r === "gold") return "gold";
+  if (r === "diamond") return "diamond";
+  if (r === "manager") return "manager";
+  // ak je admin a nemá rank, ber ako manager
+  if (role === "admin") return "manager";
+  return "rookie";
+}
 
-  // automat: ak chceš neskôr obrázky podľa hodnosti, tu sa to dá doplniť
-  const finalUrl = url || null;
+function rankMeta(rankKey) {
+  const map = {
+    rookie: { label: "Nováčik", Icon: Star, cls: "bg-zinc-900 text-white border-zinc-900" },
+    silver: { label: "Silver", Icon: DollarSign, cls: "bg-zinc-200 text-zinc-700 border-zinc-300" },
+    gold: { label: "Gold", Icon: DollarSign, cls: "bg-amber-200 text-amber-800 border-amber-300" },
+    diamond: { label: "Diamond", Icon: Gem, cls: "bg-sky-200 text-sky-800 border-sky-300" },
+    manager: { label: "Manager", Icon: Shield, cls: "bg-indigo-200 text-indigo-800 border-indigo-300" },
+    root: { label: "Root", Icon: Crown, cls: "bg-rose-200 text-rose-800 border-rose-300" },
+  };
+  return map[rankKey] || map.rookie;
+}
+
+function RankBadge({ rank, role, size = 40 }) {
+  const key = normalizeRank(rank, role);
+  const { label, Icon, cls } = rankMeta(key);
+  const badgeSize = Math.max(16, Math.floor(size * 0.38));
 
   return (
     <div
-      className="rounded-2xl border border-zinc-200 bg-white overflow-hidden flex items-center justify-center"
-      style={{ width: size, height: size }}
-      title={name || ""}
+      className={`absolute -top-1 -right-1 rounded-full border flex items-center justify-center ${cls}`}
+      style={{ width: badgeSize, height: badgeSize }}
+      title={label}
     >
-      {finalUrl ? (
-        <img src={finalUrl} alt={name || "avatar"} className="w-full h-full object-cover" />
-      ) : (
-        <div className="flex flex-col items-center justify-center">
-          <FlameMark size={Math.max(18, Math.floor(size * 0.55))} />
-          <div className="text-[10px] font-bold tracking-[0.18em] text-zinc-900 -mt-1">{initials}</div>
-          {rank ? <div className="mt-1"><RankBadge rank={rank} /></div> : null}
-        </div>
-      )}
+      <Icon className="h-3.5 w-3.5" />
     </div>
   );
 }
 
+function Avatar({ url, name, rank, role, size = 40 }) {
+  const initial = (name || "U").trim().slice(0, 1).toUpperCase();
+
+  return (
+    <div className="relative" style={{ width: size, height: size }} title={name || ""}>
+      <div className="w-full h-full rounded-full border border-zinc-200 bg-white overflow-hidden relative">
+        {url ? (
+          <>
+            <img src={url} alt={name || "avatar"} className="absolute inset-0 w-full h-full object-cover" />
+            {/* aby bol obsah VŽDY čitateľný */}
+            <div className="absolute inset-0 bg-white/65" />
+          </>
+        ) : null}
+
+        <div className="relative z-10 w-full h-full flex flex-col items-center justify-center leading-none">
+          <div className="flex items-center gap-1">
+            <FlameMark size={Math.max(14, Math.floor(size * 0.34))} />
+            <div className="text-[9px] font-extrabold tracking-[0.18em] text-zinc-900">MCRM</div>
+          </div>
+          <div className="mt-0.5 text-[13px] font-extrabold text-zinc-900">{initial}</div>
+        </div>
+      </div>
+
+      <RankBadge rank={rank} role={role} size={size} />
+    </div>
+  );
+}
 function Stat({ icon: Icon, label, value }) {
   return (
     <Card>

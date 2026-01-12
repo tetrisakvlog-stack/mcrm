@@ -554,11 +554,43 @@ export default function App() {
   async function initiateCall(contact) {
     if (!settings?.cloudtalk?.enabled) return toast.error("CloudTalk nie je zapnutý (admin).");
     if (!profile?.cloudtalk_agent_id) return toast.error("Chýba CloudTalk agent_id (admin ho nastaví).");
+
     const phone = (contact.phone || "").trim();
     if (!isLikelyE164(phone)) return toast.error("Neplatné číslo. Použi E.164 napr. +421901234567.");
 
     const backendUrl = trimTrailingSlash(import.meta.env.VITE_MCRM_BACKEND_URL || settings?.cloudtalk?.backendUrl || "");
     if (!backendUrl) return toast.error("Chýba backend URL.");
+
+    // helper: pekne vytiahne message zo servera (aj keď príde JSON)
+    async function readErrorMessage(res) {
+      let text = "";
+      try {
+        text = await res.text();
+      } catch {
+        text = "";
+      }
+
+      // Skús JSON
+      try {
+        const j = JSON.parse(text || "{}");
+        const msg =
+          j?.message ||
+          j?.error?.message ||
+          j?.responseData?.message ||
+          j?.response?.message ||
+          "";
+        const status =
+          j?.status ||
+          j?.responseData?.status ||
+          j?.error?.status ||
+          res.status;
+
+        return { status, msg: msg || text || res.statusText || "Chyba volania." };
+      } catch {
+        // Nie je JSON
+        return { status: res.status, msg: text || res.statusText || "Chyba volania." };
+      }
+    }
 
     try {
       const res = await fetch(`${backendUrl}/api/cloudtalk/call`, {
@@ -566,7 +598,18 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agent_id: profile.cloudtalk_agent_id, callee_number: phone }),
       });
-      if (!res.ok) throw new Error(await res.text());
+
+      if (!res.ok) {
+        const err = await readErrorMessage(res);
+
+        // špeciálna hláška pre presne tento prípad
+        if (err.status === 403 && /not\s+online/i.test(err.msg)) {
+          throw new Error("Agent nie je online v CloudTalk. Prihlás sa do CloudTalk a nastav status Online/Available.");
+        }
+
+        throw new Error(err.msg || `Chyba volania (${err.status}).`);
+      }
+
       await upsertContact({ ...contact, status: "called", last_call_at: new Date().toISOString() });
       toast.success("Volanie spustené.");
       await refreshData();

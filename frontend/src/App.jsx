@@ -22,6 +22,7 @@ import {
   Gem,
   Crown,
   Star,
+  Trash2,
 } from "lucide-react";
 import {
   Badge,
@@ -2334,19 +2335,21 @@ function AdminUI({ profile, profiles, settings, pendingRequests, updateUser, upd
         <CardContent className="pt-2">
           <div className="overflow-auto rounded-xl border border-zinc-200">
             <Table>
-              <THead>
-                <Tr>
-                  <Th>Avatar</Th>
-                  <Th>Meno/Alias</Th>
-                  <Th>Email</Th>
-                  <Th>Hodnosť</Th>
-                  <Th>Rola</Th>
-                  <Th className="text-right">Základ (€)</Th>
-                  <Th className="text-right">agent_id</Th>
-                  <Th className="text-right">SIP</Th>
-                  <Th className="text-right">Aktívny</Th>
-                </Tr>
-              </THead>
+<THead>
+  <Tr>
+    <Th>Avatar</Th>
+    <Th>Meno/Alias</Th>
+    <Th>Email</Th>
+    <Th>Hodnosť</Th>
+    <Th>Rola</Th>
+    <Th className="text-right">Základ (€)</Th>
+    <Th className="text-right">Zálohy (€)</Th>
+    <Th className="text-right">agent_id</Th>
+    <Th className="text-right">SIP</Th>
+    <Th className="text-right">Aktívny</Th>
+    <Th className="text-right">Akcie</Th>
+  </Tr>
+</THead>
               <TBody>
                 {profiles.map((u) => (
                   <Tr key={u.id}>

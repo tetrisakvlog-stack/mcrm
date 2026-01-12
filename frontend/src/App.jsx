@@ -699,7 +699,7 @@ if (session?.user?.id && profile && profile.approved === false) {
       <div className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-3">
-            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} size={40} />
+            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} role={profile.role} size={40} />
 
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -983,7 +983,7 @@ function MyProfile({ profile, displayName, records, monthStart, monthEnd, isAdmi
         <CardHeader className="flex items-center justify-between">
           <CardTitle>Profil</CardTitle>
           <div className="flex items-center gap-2">
-            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} size={40} />
+            <Avatar url={profile.avatar_url || null} name={displayName} rank={profile.rank} role={profile.role} size={40} />
           </div>
         </CardHeader>
 
@@ -2351,7 +2351,7 @@ function AdminUI({ profile, profiles, settings, pendingRequests, updateUser, upd
                 {profiles.map((u) => (
                   <Tr key={u.id}>
                     <Td>
-                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} size={36} />
+                      <Avatar url={u.avatar_url || null} name={u.alias || u.name} rank={u.rank} role={u.role} size={36} />
                     </Td>
                     <Td className="font-medium">{u.alias || u.name}</Td>
                     <Td className="text-zinc-600">{u.email}</Td>
